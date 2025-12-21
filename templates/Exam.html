@@ -107,6 +107,43 @@
         }
     </style>
 
+    <!-- Fullscreen Restore Button -->
+    <button id="fullscreenBtn" style="
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px 40px;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        font-size: 1.2rem;
+        font-weight: 700;
+        cursor: pointer;
+        z-index: 9999;
+        box-shadow: 0 8px 32px rgba(245, 158, 11, 0.5);
+        animation: pulse 2s infinite;
+    " onclick="enterFullscreen()">
+        <i class='bx bx-fullscreen' style="font-size: 1.5rem; vertical-align: middle;"></i>
+        Continue in Fullscreen
+    </button>
+
+    <style>
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+    </style>
+
     <!-- Toast Container -->
     <div id="toastContainer" style="
         position: fixed;
@@ -175,6 +212,132 @@
             <p>&copy; 2024 The Online Exam Proctor System</p>
         </footer>
     </main>
+
+    <div id="cameraAbsenceOverlay" style="
+        display: none;
+        position: fixed;
+        top: 0; 
+        left: 0; 
+        width: 100%; 
+        height: 100%; 
+        background: rgba(0, 0, 0, 0.85); 
+        backdrop-filter: blur(15px); 
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: white;
+        text-align: center;
+        font-family: 'Inter', sans-serif;
+    ">
+        <div style="
+            background: rgba(23, 23, 23, 0.95);
+            padding: 50px 60px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            max-width: 550px;
+            width: 90%;
+            animation: fadeIn 0.3s ease-out;
+            position: relative;
+            overflow: hidden;
+        ">
+            <!-- Icon Container -->
+            <div id="absenceIconContainer" style="
+                width: 90px; 
+                height: 90px; 
+                background: linear-gradient(135deg, #f59e0b, #d97706); 
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 24px;
+                font-size: 44px;
+                box-shadow: 0 0 30px rgba(245, 158, 11, 0.4);
+                transition: all 0.3s ease;
+            ">
+                <i class='bx bxs-zap'></i>
+            </div>
+
+            <h2 id="absenceTitle" style="font-size: 26px; margin-bottom: 10px; font-weight: 700;">Return to camera view
+                within:</h2>
+
+            <!-- Timer Display -->
+            <div style="margin: 30px 0;">
+                <div id="absenceTimer" style="
+                    font-size: 64px; 
+                    font-weight: 800; 
+                    font-variant-numeric: tabular-nums;
+                    letter-spacing: -2px;
+                    line-height: 1;
+                ">00:30</div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div style="
+                width: 100%;
+                height: 8px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 4px;
+                margin-bottom: 30px;
+                overflow: hidden;
+            ">
+                <div id="absenceProgressBar" style="
+                    width: 100%;
+                    height: 100%;
+                    background: #f59e0b;
+                    transition: width 1s linear, background-color 0.3s ease;
+                "></div>
+            </div>
+
+            <p id="absenceMessage" style="color: #9ca3af; margin-bottom: 30px; font-size: 16px;">
+                Your face must be visible to continue the exam.
+            </p>
+
+            <button id="imBackButton" onclick="checkUserPresence()" style="
+                background: rgba(255,255,255,0.1);
+                border: 1px solid rgba(255,255,255,0.2);
+                padding: 16px 40px;
+                color: white;
+                font-size: 16px;
+                font-weight: 500;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.2s;
+                width: 100%;
+            ">
+                I'm Back
+            </button>
+        </div>
+    </div>
+
+    <style>
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+    </style>
 
     <script src="{{url_for('static', filename='js/questions.js')}}"></script>
     <script src="{{url_for('static', filename='js/script.js')}}"></script>

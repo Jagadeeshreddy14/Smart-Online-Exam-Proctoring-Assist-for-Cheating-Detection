@@ -296,15 +296,15 @@
 				{% endif %}
 
 				<!-- Chat History Section -->
-				{% if resultDetials['Result'][0]['ChatHistory'] %}
+				{% if resultDetials['Result'][0].get('ChatHistory') %}
 				<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Chat History</h3>
 				<div class="glass-panel" style="padding: 20px; max-height: 400px; overflow-y: auto;">
-					{% for chat in resultDetials['Result'][0]['ChatHistory'] %}
+					{% for chat in resultDetials['Result'][0].get('ChatHistory') %}
 					<div
 						style="margin-bottom: 10px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if chat.sender == 'User' else 'flex-start' }};">
 						<div style="max-width: 70%; padding: 10px 15px; border-radius: 12px; font-size: 0.9rem; 
                                         background: {{ 'var(--primary)' if chat.sender == 'User' else 'rgba(255,255,255,0.1)' }}; 
-                                        color: {{ '#fff' if chat.sender == 'User' else 'var(--text-main)' }};
+                                        color:{{ '#fff' if chat.sender == 'User' else 'var(--text-main)' }};
                                         border-bottom-{{ 'right' if chat.sender == 'User' else 'left' }}-radius: 2px;">
 							{{ chat.message }}
 						</div>

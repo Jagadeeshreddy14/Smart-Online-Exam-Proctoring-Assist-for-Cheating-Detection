@@ -62,6 +62,84 @@ function showToast(message, type = 'success') {
     }, 4000);
 }
 
+// Persistent Toast functions
+function showPersistentToast(id, message, type) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    let toast = document.getElementById(id);
+
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = id;
+        const bgColor = type === 'success' ? 'linear-gradient(135deg, #10b981, #059669)' :
+            type === 'error' ? 'linear-gradient(135deg, #ef4444, #dc2626)' :
+                type === 'warning' ? 'linear-gradient(135deg, #f59e0b, #d97706)' :
+                    'linear-gradient(135deg, #06b6d4, #0891b2)';
+
+        toast.style.cssText = `
+            background: ${bgColor};
+            color: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            animation: slideIn 0.3s ease;
+            font-weight: 600;
+            z-index: 10001; /* Higher than normal toasts */
+        `;
+        container.appendChild(toast);
+    }
+
+    const icon = type === 'success' ? 'bx-check-circle' :
+        type === 'error' ? 'bx-error-circle' :
+            type === 'warning' ? 'bx-error' : 'bx-info-circle';
+
+    toast.innerHTML = `
+        <i class='bx ${icon}' style="font-size: 1.5rem;"></i>
+        <span style="flex: 1;">${message}</span>
+    `;
+}
+
+function removePersistentToast(id) {
+    const toast = document.getElementById(id);
+    if (toast) {
+        toast.remove();
+    }
+}
+
+// Fullscreen button functions
+function showFullscreenButton() {
+    const btn = document.getElementById('fullscreenBtn');
+    if (btn) {
+        btn.style.display = 'block';
+    }
+}
+
+function hideFullscreenButton() {
+    const btn = document.getElementById('fullscreenBtn');
+    if (btn) {
+        btn.style.display = 'none';
+    }
+}
+
+function enterFullscreen() {
+    const elem = document.documentElement;
+    const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
+    if (requestFS) {
+        requestFS.call(elem).then(() => {
+            showToast('Fullscreen restored ✅', 'success');
+            hideFullscreenButton();
+        }).catch((err) => {
+            console.error("Manual fullscreen failed:", err);
+            showToast('❌ Fullscreen request denied. Please allow fullscreen!', 'error');
+        });
+    }
+}
+
 // Get location as soon as possible and enforce it
 function requestLocation() {
     if (navigator.geolocation) {
@@ -92,6 +170,7 @@ for (var i = 0; i < 4; i++) {
 
 //Start Quiz function
 function startQuiz() {
+    showToast('Exam started! Good luck! 🎯', 'success');
     startTimer();
     buildQuestion();
     startScreenRecording();
@@ -101,8 +180,135 @@ function startQuiz() {
     const cameraPreview = document.getElementById('cameraPreview');
     if (cameraPreview) {
         cameraPreview.style.display = 'block';
+        setTimeout(() => showToast('Live camera monitoring active 📹', 'info'), 1000);
+    }
+
+    // Start polling for no-person warnings
+    startPersonDetectionPolling();
+}
+
+// Poll for camera absence
+let personPollingInterval = null;
+const absenceOverlay = document.getElementById('cameraAbsenceOverlay');
+const absenceTimer = document.getElementById('absenceTimer');
+const absenceProgressBar = document.getElementById('absenceProgressBar');
+const absenceIconContainer = document.getElementById('absenceIconContainer');
+const absenceTitle = document.getElementById('absenceTitle');
+const absenceMessage = document.getElementById('absenceMessage');
+
+function startPersonDetectionPolling() {
+    if (personPollingInterval) return;
+
+    personPollingInterval = setInterval(() => {
+        $.ajax({
+            type: "GET",
+            url: "/api/check_person_status",
+            success: function (response) {
+                // 1. Alert Phase (Toast Only)
+                if (response.status === 'alert_phase') {
+                    if (absenceOverlay) absenceOverlay.style.display = 'none';
+                    showPersistentToast('person-warning', response.message, 'warning');
+                }
+                // 2. Countdown Phase (Overlay)
+                else if (response.status === 'countdown_phase') {
+                    // Hide toast, show overlay
+                    removePersistentToast('person-warning');
+                    if (absenceOverlay) {
+                        absenceOverlay.style.display = 'flex';
+
+                        // Update Timer
+                        if (absenceTimer) {
+                            absenceTimer.textContent = `00:${response.remaining.toString().padStart(2, '0')}`;
+                        }
+
+                        // Update Progress Bar
+                        if (absenceProgressBar) {
+                            const percent = (response.remaining / response.total_countdown) * 100;
+                            absenceProgressBar.style.width = `${percent}%`;
+                        }
+
+                        // Critical Warning (< 15s)
+                        if (response.remaining <= 15) {
+                            // Update Visuals to Red/Critical
+                            if (absenceIconContainer) {
+                                absenceIconContainer.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                                absenceIconContainer.innerHTML = "<i class='bx bxs-error'></i>";
+                                absenceIconContainer.style.boxShadow = '0 0 30px rgba(239, 68, 68, 0.4)';
+                            }
+                            if (absenceProgressBar) absenceProgressBar.style.backgroundColor = '#ef4444';
+                            if (absenceTitle) absenceTitle.innerHTML = "WARNING: Exam will be terminated";
+                            if (absenceTitle) absenceTitle.style.color = '#ef4444';
+                            if (absenceTimer) absenceTimer.style.color = '#ef4444';
+                        } else {
+                            // Standard Warning (Yellow/Orange)
+                            if (absenceIconContainer) {
+                                absenceIconContainer.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                                absenceIconContainer.innerHTML = "<i class='bx bxs-zap'></i>";
+                                absenceIconContainer.style.boxShadow = '0 0 30px rgba(245, 158, 11, 0.4)';
+                            }
+                            if (absenceProgressBar) absenceProgressBar.style.backgroundColor = '#f59e0b';
+                            if (absenceTitle) absenceTitle.innerHTML = "Return to camera view within:";
+                            if (absenceTitle) absenceTitle.style.color = 'white';
+                            if (absenceTimer) absenceTimer.style.color = 'white';
+                        }
+                    }
+                }
+                // 3. Terminated
+                else if (response.status === 'terminated') {
+                    window.location.href = "/exam_terminated";
+                }
+                // 4. OK / Grace
+                else {
+                    if (absenceOverlay) absenceOverlay.style.display = 'none';
+                    removePersistentToast('person-warning');
+                }
+            },
+            error: function () {
+                console.error("Failed to check person status");
+            }
+        });
+    }, 1000);
+}
+
+function stopPersonDetectionPolling() {
+    if (personPollingInterval) {
+        clearInterval(personPollingInterval);
+        personPollingInterval = null;
     }
 }
+
+// "I'm Back" Button Handler
+window.checkUserPresence = function () {
+    const btn = document.getElementById('imBackButton');
+    const originalText = btn.textContent;
+    btn.textContent = "Checking...";
+    btn.disabled = true;
+
+    // Force a poll/wait for poll
+    setTimeout(() => {
+        // We rely on the next poll to clear it if successful
+        // But we can give visual feedback
+        $.ajax({
+            type: "GET",
+            url: "/api/check_person_status",
+            success: function (response) {
+                if (response.status === 'ok' || response.status === 'grace_period') {
+                    // Success - overlay will hide automatically by polling
+                    showToast('Welcome back! 👋', 'success');
+                } else {
+                    // Failed
+                    btn.textContent = "Still No Face Detected";
+                    btn.style.background = "#ef4444";
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = "linear-gradient(135deg, #06b6d4, #3b82f6)";
+                        btn.disabled = false;
+                    }, 1500);
+                }
+            }
+        });
+    }, 500);
+};
 
 function setupFullscreenMonitoring() {
     // Monitor for fullscreen exit
@@ -132,25 +338,28 @@ function reportViolation(type, details) {
         success: function (response) {
             console.log("Violation response:", response.action);
             if (response.action === "warning") {
-                // First time warning - alert will serve as user gesture for re-requesting FS
+                // First time warning - show toast and re-request fullscreen
                 showToast('⚠️ FINAL WARNING: ' + response.message, 'warning');
-                alert("ATTENTION: " + response.message);
 
-                // Re-request fullscreen after alert is dismissed
-                const elem = document.documentElement;
-                const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
-                if (requestFS) {
-                    requestFS.call(elem).then(() => {
-                        showToast('Fullscreen restored ✅', 'success');
-                    }).catch(() => {
-                        console.error("Auto-restoration of fullscreen failed.");
-                        showToast('Failed to restore fullscreen!', 'error');
-                    });
-                }
+                // Wait a moment for toast to be visible, then re-request fullscreen
+                setTimeout(() => {
+                    const elem = document.documentElement;
+                    const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
+                    if (requestFS) {
+                        requestFS.call(elem).then(() => {
+                            showToast('Fullscreen restored ✅', 'success');
+                            hideFullscreenButton();
+                        }).catch((err) => {
+                            console.error("Auto-restoration of fullscreen failed:", err);
+                            showToast('⚠️ Click the button to continue in fullscreen!', 'warning');
+                            showFullscreenButton();
+                        });
+                    }
+                }, 500);
             } else if (response.action === "terminated") {
                 // Second time (or other critical) - terminate immediately
-                showToast('Exam terminated due to violations!', 'error');
-                setTimeout(() => window.location.href = "/exam_terminated", 1000);
+                showToast('❌ Exam terminated due to violations!', 'error');
+                setTimeout(() => window.location.href = "/exam_terminated", 1500);
             }
         },
         error: function (xhr, status, error) {

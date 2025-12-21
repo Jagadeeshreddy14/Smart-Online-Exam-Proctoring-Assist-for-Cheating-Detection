@@ -711,6 +711,47 @@ def report_violation():
         
     return jsonify({"success": True, "action": "logged"})
 
+@app.route('/api/check_person_status', methods=['GET'])
+def check_person_status():
+    """Check if person is detected in camera."""
+    status = getattr(utils, 'no_person_status', {'detected': True, 'start_time': None})
+    # print(f"DEBUG: Status Check - Detected: {status['detected']}, Start: {status['start_time']}") 
+    
+    if not status['detected'] and status['start_time'] is not None:
+        elapsed = time.time() - status['start_time']
+        
+        # New Phases Logic
+        # 0-10s: Grace
+        if elapsed < 10:
+            return jsonify({
+                "status": "grace_period", 
+                "elapsed": elapsed, 
+                "warning": False
+            })
+        # 10-30s: Initial Alert (Toast)
+        elif elapsed < 30:
+            return jsonify({
+                "status": "alert_phase",
+                "message": "⚠️ Please ensure your face is visible in the camera",
+                "elapsed": elapsed,
+                "warning": True
+            })
+        # 30-60s: Countdown Overlay
+        elif elapsed < 60:
+            remaining = 60 - elapsed
+            return jsonify({
+                "status": "countdown_phase", 
+                "message": "Return to camera view within:",
+                "elapsed": elapsed,
+                "remaining": int(remaining),
+                "total_countdown": 30, # 60-30
+                "warning": True
+            })
+        else:
+            return jsonify({"status": "terminated", "warning": True})
+            
+    return jsonify({"status": "ok", "warning": False})
+
 @app.route('/showResultPass/<result_status>')
 def showResultPass(result_status):
     """Show pass result page."""

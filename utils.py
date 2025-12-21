@@ -60,6 +60,8 @@ shortcut_flag = False
 shortcut_event_name = ""
 exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
 violation_counts = {} # Tracks counts of specific violations per session
+no_person_status = {'detected': True, 'start_time': None}
+
 
 # Result ID Initialization
 def fetch_last_id():
@@ -1247,25 +1249,106 @@ def cheat_Detection1():
     deleteTrashVideos()
 
 def cheat_Detection2():
-    global Globalflag, shorcuts
-    print(f'CD2 Flag is {Globalflag}')
+    global Globalflag, shorcuts, no_person_status
+    print(f'=== CHEAT DETECTION 2 STARTED === Flag is {Globalflag}')
 
     deleteTrashVideos()
+    frame_count = 0
+    skip_frames = 2  # Process every 3rd frame for speed
+    
+    # Initialize status
+    no_person_status['detected'] = True
+    no_person_status['start_time'] = None
+    
+    # Timing Constants for Face Presence
+    # 0-10s: Grace Period
+    # 10-30s: Initial Alert (Toast)
+    # 30-60s: Countdown Overlay (30s)
+    ALERT_THRESHOLD = 10
+    COUNTDOWN_START_THRESHOLD = 30
+    TOTAL_TIMEOUT = 60 
+    
     while Globalflag:
+        # Check if cap is valid before reading
+        if cap is None or not cap.isOpened():
+            print("Camera is not open, cheat detection 2 stopping/pausing...")
+            time.sleep(1)
+            continue
+
         success, image = cap.read()
         if not success:
+            print("WARNING: Failed to read frame from camera!")
             continue
-        image1 = image.copy()
+        
+        # Skip frames for faster processing
+        frame_count += 1
+        if frame_count % skip_frames != 0:
+            continue
+        
+        # Resize for faster processing (reduce to 640x480)
+        try:
+            image_resized = cv2.resize(image, (640, 480))
+            # Lighter brightness enhancement (faster)
+            image_processed = cv2.convertScaleAbs(image_resized, alpha=1.15, beta=25)
+        except Exception:
+            # Fallback if resize fails
+            image_processed = image.copy()
+        
+        if frame_count % 60 == 0:  # Log every 60 frames (~2 seconds)
+            print(f"Processing frame {frame_count} - Detection active (Optimized)")
+        
+        image1 = image_processed.copy()
+        
+        # Check for person detection first
+        person_detected = check_person_present(image1)
+        
+        if not person_detected:
+            no_person_status['detected'] = False
+            if no_person_status['start_time'] is None:
+                no_person_status['start_time'] = time.time()
+                print("⚠️ WARNING: No person detected in frame!")
+            else:
+                elapsed = time.time() - no_person_status['start_time']
+                
+                # Check for termination
+                if elapsed >= TOTAL_TIMEOUT:
+                    print(f"❌ TERMINATING: No person detected for {TOTAL_TIMEOUT} seconds!")
+                    # Pass the original image (or optimized one) as evidence of empty seat
+                    terminate_exam("No participant detected in camera feed", image1)
+                    break
+        else:
+            # Reset timer if person is detected
+            if no_person_status['start_time'] is not None:
+                print("✅ Person detected again - timer reset")
+            no_person_status['detected'] = True
+            no_person_status['start_time'] = None
+        
+        # Run other detections
         MTOP_Detection(image1)
         screenDetection()
-        electronicDevicesDetection(image.copy())
+        electronicDevicesDetection(image1.copy())
         
         if shortcut_flag:
+            print(f"SHORTCUT DETECTED: {shortcut_event_name}")
             Shortcut_record_duration(f"Shortcut ({shortcut_event_name}) detected", image)
             shortcut_flag = False
+    
+    print("=== CHEAT DETECTION 2 STOPPED ===")
     deleteTrashVideos()
     if cap is not None:
         cap.release()
+
+def check_person_present(image):
+    """Quick check if a person/face is present in the frame."""
+    try:
+        # Use OpenCV's fast face detector
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        return len(faces) > 0
+    except Exception as e:
+        print(f"Error in person detection: {e}")
+        return True  # Assume person present on error to avoid false termination
 
 #Query Related
 #Function to give the next resut id
