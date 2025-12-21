@@ -16,7 +16,10 @@ import utils
 import random
 import time
 import cv2
-import keyboard
+try:
+    import keyboard
+except ImportError:
+    keyboard = None
 from dotenv import load_dotenv
 
 # Load environment variables
