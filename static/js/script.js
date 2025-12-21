@@ -19,16 +19,22 @@ var recordedChunks = [];
 var userLocation = { latitude: null, longitude: null };
 var examSessionId = "session_" + Date.now();
 
-// Get location as soon as possible
-if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(function (position) {
-        userLocation.latitude = position.coords.latitude;
-        userLocation.longitude = position.coords.longitude;
-        console.log("Location captured:", userLocation);
-    }, function (error) {
-        console.warn("Location access denied or failed:", error);
-    });
+// Get location as soon as possible and enforce it
+function requestLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function (position) {
+            userLocation.latitude = position.coords.latitude;
+            userLocation.longitude = position.coords.longitude;
+            console.log("Location captured:", userLocation);
+        }, function (error) {
+            console.warn("Location access denied or failed:", error);
+            // We'll alert later in startQuiz if it's still null
+        });
+    } else {
+        alert("Geolocation is not supported by this browser.");
+    }
 }
+requestLocation();
 
 //create buttons for choices
 for (var i = 0; i < 4; i++) {

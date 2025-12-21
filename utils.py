@@ -56,6 +56,8 @@ import wave
 Globalflag = False
 stop_proctoring_flag = False
 Student_Name = ''
+shortcut_flag = False
+shortcut_event_name = ""
 
 # Result ID Initialization
 def fetch_last_id():
@@ -428,6 +430,40 @@ def MTOP_record_duration(text, img):
             writer[2] = cv2.VideoWriter(video[2], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height))
             flag[2] = False
     prev_state[2] = text
+
+def Shortcut_record_duration(text, img):
+    global start_time, end_time, flag, writer, width, height, video
+    print(f"Recording Shortcut Evidence: {text}")
+    
+    # We record for at least 3 seconds (approx 60 frames at 20fps)
+    # Since this is triggered once, we'll start a simple recording
+    if not flag[0]:
+        start_time[0] = time.time()
+        flag[0] = True
+        
+    writer[0].write(img)
+    
+    # If 3 seconds passed
+    if (time.time() - start_time[0]) > 3:
+        writer[0].release()
+        outputVideo = 'ShortcutViolation' + video[0]
+        shortcutViolation = {
+            "Name": text,
+            "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[0])),
+            "Duration": "3 seconds",
+            "Mark": 5,
+            "Link": outputVideo,
+            "RId": get_resultId()
+        }
+        write_json(shortcutViolation)
+        reduceBitRate(video[0], outputVideo)
+        move_file_to_output_folder(outputVideo)
+        
+        # Reset writer for next use
+        os.remove(video[0])
+        video[0] = str(random.randint(1, 50000)) + ".mp4"
+        writer[0] = cv2.VideoWriter(video[0], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+        flag[0] = False
 
 #Recording Function for Screen Detection
 def SD_record_duration(text, img):
@@ -881,7 +917,12 @@ def shortcut_handler(event):
         elif keyboard.is_pressed('ctrl') and keyboard.is_pressed('z'):
             shortcut += 'Ctrl+Z'
             print("Ctrl+Z shortcut detected!")
-        shorcuts.append(shortcut) if shortcut != "" else None
+        
+        if shortcut != "":
+            shorcuts.append(shortcut)
+            global shortcut_flag, shortcut_event_name
+            shortcut_flag = True
+            shortcut_event_name = shortcut
 
 def screenDetection():
     global active_window, active_window_title, exam_window_title
@@ -1110,6 +1151,10 @@ def cheat_Detection2():
         image2 = image
         MTOP_Detection(image1)
         screenDetection()
+        
+        if shortcut_flag:
+            Shortcut_record_duration(f"Shortcut ({shortcut_event_name}) detected", image)
+            shortcut_flag = False
     deleteTrashVideos()
     if Globalflag:
         cap.release()

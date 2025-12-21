@@ -157,8 +157,11 @@ def result():
         
         # Add to result document
         try:
+            # We must update the LAST result saved by this session/process
+            # Since write_json increments the ID, the actual result ID is resultId - 1
+            current_id = utils.get_resultId() - 1
             mongo.db.results.update_one(
-                {"Id": utils.get_resultId()},
+                {"Id": current_id},
                 {"$set": {
                     "SuspicionLog": suspicion_data,
                     "EndTime": time.strftime("%H:%M:%S")
@@ -571,15 +574,8 @@ def examAction():
             
             # Handle shortcuts detection
             if hasattr(utils, 'shorcuts') and utils.shorcuts:
-                shortcut_text = f"Prohibited Shorcuts ({','.join(list(dict.fromkeys(utils.shorcuts)))}) are detected."
-                utils.write_json({
-                    "Name": shortcut_text,
-                    "Time": f"{len(utils.shorcuts)} Counts",
-                    "Duration": '',
-                    "Mark": (1.5 * len(utils.shorcuts)),
-                    "Link": '',
-                    "RId": utils.get_resultId()
-                })
+                # Individual records are now handled in utils.Shortcut_record_duration
+                # We just clear the list here after processing marks
                 utils.shorcuts = []
             
             # Calculate scores
@@ -770,6 +766,11 @@ def adminResultDetails(id):
         mongo_result = mongo.db.results.find_one({"Id": id})
         resultDetials = utils.getResultDetails(id)
         if mongo_result:
+            # Fill missing required keys from JSON fallback if they are missing in MongoDB
+            for key in ["TotalMark", "TrustScore", "Status", "Name", "Date"]:
+                if key not in mongo_result and resultDetials['Result'] and key in resultDetials['Result'][0]:
+                    mongo_result[key] = resultDetials['Result'][0][key]
+            
             # Prefer MongoDB metadata (includes Location, SessionId)
             resultDetials['Result'] = [mongo_result]
     except Exception as e:

@@ -176,8 +176,9 @@
 								<span style="display: block; font-size: 14px; color: var(--text-muted);">Status</span>
 								<div class="header-actions">
 									<span
-										class="status-badge status-{{ 'pass' if resultDetials['Result'][0]['TotalMark'] >= 50 else 'fail' }}">
-										{{ 'Passed' if resultDetials['Result'][0]['TotalMark'] >= 50 else 'Failed' }}
+										class="status-badge status-{{ 'pass' if resultDetials['Result'][0]['TotalMark']|default(0) >= 50 else 'fail' }}">
+										{{ 'Passed' if resultDetials['Result'][0]['TotalMark']|default(0) >= 50 else
+										'Failed' }}
 									</span>
 
 									<!-- Enable Retest Button -->
@@ -194,9 +195,9 @@
 								<span style="display: block; font-size: 14px; color: var(--text-muted);">Trust
 									Score</span>
 								<span style="font-size: 18px; font-weight: 700; color: var(--primary);">{{
-									resultDetials['Result'][0]['TrustScore'] }}%</span>
+									resultDetials['Result'][0]['TrustScore']|default(0) }}%</span>
 								<span style="font-size: 18px; font-weight: 700; color: var(--secondary);">{{
-									resultDetials['Result'][0]['TotalMark'] }}%</span>
+									resultDetials['Result'][0]['TotalMark']|default(0) }}%</span>
 							</div>
 						</div>
 					</div>
