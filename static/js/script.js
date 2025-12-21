@@ -14,6 +14,21 @@ var secondsLeft = 300, questionIndex = 0, correct = 0;
 var totalQuestions = questions.length;
 var question, option1, option2, option3, option4, ans, previousScores;
 var choiceArray = [], divArray = [];
+var mediaRecorder;
+var recordedChunks = [];
+var userLocation = { latitude: null, longitude: null };
+var examSessionId = "session_" + Date.now();
+
+// Get location as soon as possible
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function (position) {
+        userLocation.latitude = position.coords.latitude;
+        userLocation.longitude = position.coords.longitude;
+        console.log("Location captured:", userLocation);
+    }, function (error) {
+        console.warn("Location access denied or failed:", error);
+    });
+}
 
 //create buttons for choices
 for (var i = 0; i < 4; i++) {
@@ -40,7 +55,56 @@ function startQuiz() {
 
     startTimer();
     buildQuestion();
+    startScreenRecording();
+}
 
+async function startScreenRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { mediaSource: "screen" }
+        });
+
+        mediaRecorder = new MediaRecorder(stream);
+        recordedChunks = [];
+
+        mediaRecorder.ondataavailable = function (e) {
+            if (e.data.size > 0) {
+                recordedChunks.push(e.data);
+            }
+        };
+
+        mediaRecorder.onstop = function () {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            uploadRecording(blob);
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        console.log("Screen recording started");
+    } catch (err) {
+        console.error("Error starting screen recording:", err);
+        alert("Screen recording is required for this exam. Please allow screen sharing.");
+    }
+}
+
+function uploadRecording(blob) {
+    const formData = new FormData();
+    formData.append('recording', blob, 'recording.webm');
+    formData.append('sessionId', examSessionId);
+
+    $.ajax({
+        type: 'POST',
+        url: '/upload_recording',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (response) {
+            console.log("Recording uploaded successfully:", response);
+        },
+        error: function (err) {
+            console.error("Recording upload failed:", err);
+        }
+    });
 }
 
 //function to start timer when quiz starts
@@ -136,12 +200,21 @@ function viewResult() {
     completeTest.appendChild(scoreButton);
 
     scoreButton.addEventListener("click", function () {
+        // Stop recording if it's running
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+
         var inputData = correct;
         $.ajax({
             type: "POST",
             url: "/exam",
             contentType: "application/json",
-            data: JSON.stringify({ input: inputData }),
+            data: JSON.stringify({
+                input: inputData,
+                location: userLocation,
+                sessionId: examSessionId
+            }),
             success: function (response) {
                 console.log("Submission response:", response);
 

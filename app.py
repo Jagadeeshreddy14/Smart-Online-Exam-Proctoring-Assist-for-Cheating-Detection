@@ -603,6 +603,12 @@ def examAction():
                     status = "Pass"
                     link = 'showResultPass'
             
+            # Extract location and sessionId
+            location = examData.get('location', {})
+            lat = location.get('latitude', 'Unknown')
+            lon = location.get('longitude', 'Unknown')
+            sessionId = examData.get('sessionId', 'Unknown')
+
             # Save result
             utils.write_json({
                 "Id": utils.get_resultId(),
@@ -612,16 +618,41 @@ def examAction():
                 "Status": status,
                 "Date": time.strftime("%Y-%m-%d", time.localtime(time.time())),
                 "StId": current_student['Id'],
-                "Link": profileName,
-                "StartTime": time.strftime("%H:%M:%S")  # Add start time
+                "Link": profileName if profileName else 'avatar.svg',
+                "StartTime": time.strftime("%H:%M:%S"),
+                "Location": f"{lat}, {lon}",
+                "SessionId": sessionId
             }, "result.json")
             
             resultStatus = f"{current_student['Name']};{totalMark};{status};{time.strftime('%Y-%m-%d', time.localtime(time.time()))}"
         else:
             utils.Globalflag = True
-            print('Exam submission with empty input')
+            print('Exam started or empty submission')
         
         return jsonify({"output": resultStatus, "link": link})
+
+@app.route('/upload_recording', methods=['POST'])
+def upload_recording():
+    """Handle screen recording uploads."""
+    if 'recording' not in request.files:
+        return jsonify({"error": "No recording file"}), 400
+    
+    file = request.files['recording']
+    sessionId = request.form.get('sessionId', str(int(time.time())))
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Ensure recordings directory exists
+    recording_dir = os.path.join('static', 'recordings')
+    if not os.path.exists(recording_dir):
+        os.makedirs(recording_dir)
+
+    # Save file with sessionId
+    filename = f"{sessionId}.webm"
+    file.save(os.path.join(recording_dir, filename))
+    
+    return jsonify({"success": True, "filename": filename})
 
 @app.route('/showResultPass/<result_status>')
 def showResultPass(result_status):
