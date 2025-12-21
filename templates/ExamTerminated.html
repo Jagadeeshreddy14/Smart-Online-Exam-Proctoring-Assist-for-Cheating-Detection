@@ -4,90 +4,625 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exam Terminated</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
-    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+    <title>Exam Terminated | Proctor System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <style>
+        :root {
+            --danger: #ff4d4d;
+            --danger-bg: rgba(255, 77, 77, 0.1);
+            --bg: #0a0a0c;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-muted: #a0a0a8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
         body {
+            background: var(--bg);
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(255, 77, 77, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(60, 145, 230, 0.08) 0%, transparent 40%);
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            text-align: center;
+            min-height: 100vh;
+            color: var(--text-main);
+            padding: 20px 0;
         }
 
         .container {
             width: 90%;
-            max-width: 600px;
-            padding: 40px;
-            background: rgba(239, 68, 68, 0.1);
-            /* Red tint */
-            border: 1px solid var(--danger);
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
+            max-width: 550px;
+            padding: 50px 40px;
+            background: var(--card-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: 32px;
+            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.7);
+            animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            z-index: 10;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.98);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .icon-wrapper {
+            width: 80px;
+            height: 80px;
+            background: var(--danger-bg);
+            border-radius: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 24px;
+            border: 1px solid rgba(255, 77, 77, 0.2);
+            box-shadow: 0 0 20px rgba(255, 77, 77, 0.1);
+        }
+
+        .icon-wrapper i {
+            font-size: 40px;
+            color: var(--danger);
         }
 
         h1 {
-            color: var(--danger);
-            font-size: 2.5rem;
-            margin-bottom: 20px;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
-        p {
-            font-size: 1.1rem;
-            margin-bottom: 30px;
-            color: var(--text-main);
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: var(--danger-bg);
+            color: var(--danger);
+            border-radius: 100px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 77, 77, 0.2);
+        }
+
+        p.main-msg {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+
+        .evidence-container {
+            margin-bottom: 32px;
+            animation: slideIn 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .evidence-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .evidence-box {
-            margin: 20px 0;
-            border: 2px solid var(--danger);
-            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
             overflow: hidden;
-            background: #000;
+            background: rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            aspect-ratio: 16/9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-muted);
+            position: relative;
         }
 
-        img {
+        .evidence-box img {
             width: 100%;
-            display: block;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .evidence-box:hover img {
+            transform: scale(1.08);
+        }
+
+        .evidence-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .evidence-placeholder i {
+            font-size: 48px;
+            opacity: 0.3;
+        }
+
+        .violation-details {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 24px;
+            border-radius: 24px;
+            border: 1px solid var(--glass-border);
+            margin-bottom: 40px;
+            text-align: left;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .detail-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-label {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .detail-value {
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.95rem;
         }
 
         .btn {
-            display: inline-block;
-            padding: 12px 30px;
-            background: var(--danger);
-            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 18px;
+            background: #ffffff;
+            color: #000000;
             text-decoration: none;
-            border-radius: 50px;
-            font-weight: 600;
-            margin-top: 20px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1.05rem;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            border: none;
         }
 
         .btn:hover {
-            opacity: 0.9;
-            color: white;
+            transform: translateY(-4px);
+            box-shadow: 0 15px 30px rgba(255, 255, 255, 0.15);
+            background: #f8f8f8;
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn i {
+            font-size: 1.3rem;
+        }
+
+        .footer-note {
+            margin-top: 30px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            opacity: 0.8;
+        }
+
+        /* Decorative elements */
+        .decoration {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            filter: blur(80px);
+            border-radius: 50%;
+            z-index: -1;
+        }
+
+        .decoration-1 {
+            top: -50px;
+            left: -50px;
+            background: rgba(255, 77, 77, 0.15);
+        }
+
+        .decoration-2 {
+            bottom: -50px;
+            right: -50px;
+            background: rgba(60, 145, 230, 0.15);
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <h1><i class='bx bxs-error-circle'></i> Exam Terminated</h1>
-        <p>Your exam has been automatically terminated due to a detected violation.</p>
+    <div class="decoration decoration-1"></div>
+    <div class="decoration decoration-2"></div>
 
-        <div class="evidence-box">
-            <!-- Correctly link to the captured evidence image -->
-            <img src="{{ url_for('static', filename='OutputVideos/violation_evidence.jpg') }}" alt="Violation Evidence">
+    <div class="container">
+        <div class="icon-wrapper">
+            <i class='bx bxs-shield-x'></i>
         </div>
 
-        <p style="font-size: 0.9rem; color: var(--text-muted);">
-            Type: <strong>{{ violation_type }}</strong><br>
-            An automatic notification has been sent to the administrator.
-        </p>
+        <div class="status-badge">Integrity Alert</div>
 
-        <a href="/" class="btn">Return to Home</a>
+        <h1>Exam Terminated</h1>
+        <p class="main-msg">Your session was automatically halted due to a critical proctoring violation detection.</p>
+
+        <div class="evidence-container">
+            <div class="evidence-label">
+                <i class='bx bx-camera'></i> Captured Evidence
+            </div>
+            <div class="evidence-box" id="evidenceBox">
+                {% if evidence_image %}
+                <img src="{{ url_for('static', filename='Violations/' + evidence_image) }}" alt="Violation Evidence"
+                    id="violationImg" onerror="handleImageError()">
+                {% else %}
+                <div class="evidence-placeholder">
+                    <i class='bx bx-image-alt'></i>
+                    <span>No visual evidence captured for this incident.</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="violation-details">
+            <div class="detail-item">
+                <span class="detail-label">Violation Type</span>
+                <span class="detail-value" style="color: var(--danger);">{{ violation_type }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Action Taken</span>
+                <span class="detail-value">Automatic Termination</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Status</span>
+                <span class="detail-value">Log Sent to Proctor</span>
+            </div>
+        </div>
+
+        <a href="/" class="btn">
+            <i class='bx bx-home-alt-2'></i> Return to Dashboard
+        </a>
+
+        <!-- Need Help Section -->
+        <div style="
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        ">
+            <h3 style="
+                font-size: 1.1rem;
+                color: var(--text-main);
+                margin-bottom: 10px;
+                font-weight: 600;
+            ">
+                <i class='bx bx-help-circle'
+                    style="color: var(--primary); font-size: 1.3rem; vertical-align: middle;"></i>
+                Need Help?
+            </h3>
+            <p style="
+                color: var(--text-muted);
+                font-size: 0.9rem;
+                margin-bottom: 15px;
+            ">
+                If you believe this termination was in error or need clarification, contact the administrator
+                immediately.
+            </p>
+            <button id="contactAdminBtn" style="
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, var(--primary), var(--secondary));
+                color: white;
+                border: none;
+                border-radius: 12px;
+                font-weight: 600;
+                font-size: 0.95rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+            " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(6, 182, 212, 0.4)';"
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(6, 182, 212, 0.3)';">
+                <i class='bx bx-message-dots' style="font-size: 1.2rem;"></i>
+                Chat with Administrator
+            </button>
+        </div>
+
+        <p class="footer-note">
+            The administrator has been notified. Please contact support for any clarification.
+        </p>
     </div>
+
+    <!-- Admin Chat Modal -->
+    <div id="adminChatModal" style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    ">
+        <div style="
+            width: 90%;
+            max-width: 500px;
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        ">
+            <div style="
+                padding: 20px;
+                background: linear-gradient(135deg, var(--primary), var(--secondary));
+                color: white;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            ">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.2rem;">Administrator Support</h3>
+                    <p style="margin: 5px 0 0 0; font-size: 0.85rem; opacity: 0.9;">We'll respond shortly</p>
+                </div>
+                <button id="closeChatBtn" style="
+                    background: rgba(255, 255, 255, 0.2);
+                    border: none;
+                    color: white;
+                    width: 35px;
+                    height: 35px;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    font-size: 1.5rem;
+                ">×</button>
+            </div>
+
+            <div id="chatMessages" style="
+                height: 300px;
+                overflow-y: auto;
+                padding: 20px;
+                background: rgba(0, 0, 0, 0.2);
+            ">
+                <div style="
+                    background: rgba(6, 182, 212, 0.1);
+                    padding: 12px;
+                    border-radius: 12px;
+                    margin-bottom: 10px;
+                    border-left: 3px solid var(--primary);
+                ">
+                    <p style="margin: 0; font-size: 0.9rem; color: var(--text-main);">
+                        <strong>System:</strong> Your exam was terminated for: <span style="color: var(--danger);">{{
+                            violation_type }}</span>
+                    </p>
+                </div>
+            </div>
+
+            <div style="padding: 20px; border-top: 1px solid var(--glass-border);">
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="chatInput" placeholder="Type your message..." style="
+                        flex: 1;
+                        padding: 12px 16px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border: 1px solid var(--glass-border);
+                        border-radius: 12px;
+                        color: var(--text-main);
+                        font-size: 0.95rem;
+                    ">
+                    <button id="sendChatBtn" style="
+                        padding: 12px 20px;
+                        background: linear-gradient(135deg, var(--primary), var(--secondary));
+                        border: none;
+                        border-radius: 12px;
+                        color: white;
+                        font-weight: 600;
+                        cursor: pointer;
+                    ">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" style="
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    "></div>
+
+    <script>
+        function handleImageError() {
+            const box = document.getElementById('evidenceBox');
+            box.innerHTML = `
+                <div class="evidence-placeholder">
+                    <i class='bx bx-error' style="color: var(--danger); opacity: 0.6;"></i>
+                    <span style="color: var(--text-muted);">Evidence image could not be loaded.</span>
+                </div>
+            `;
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'linear-gradient(135deg, #10b981, #059669)' :
+                type === 'error' ? 'linear-gradient(135deg, #ef4444, #dc2626)' :
+                    'linear-gradient(135deg, #06b6d4, #0891b2)';
+
+            toast.style.cssText = `
+                background: ${bgColor};
+                color: white;
+                padding: 16px 20px;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 300px;
+                animation: slideIn 0.3s ease;
+            `;
+
+            const icon = type === 'success' ? 'bx-check-circle' :
+                type === 'error' ? 'bx-error-circle' : 'bx-info-circle';
+
+            toast.innerHTML = `
+                <i class='bx ${icon}' style="font-size: 1.5rem;"></i>
+                <span style="flex: 1;">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Chat functionality
+        document.addEventListener('DOMContentLoaded', function () {
+            const contactBtn = document.getElementById('contactAdminBtn');
+            const chatModal = document.getElementById('adminChatModal');
+            const closeBtn = document.getElementById('closeChatBtn');
+            const sendBtn = document.getElementById('sendChatBtn');
+            const chatInput = document.getElementById('chatInput');
+            const chatMessages = document.getElementById('chatMessages');
+
+            if (!contactBtn || !chatModal) {
+                console.error('Chat elements not found');
+                return;
+            }
+
+            contactBtn.addEventListener('click', () => {
+                chatModal.style.display = 'flex';
+                showToast('Chat opened. Admin will respond soon.', 'info');
+            });
+
+            closeBtn.addEventListener('click', () => {
+                chatModal.style.display = 'none';
+            });
+
+            chatModal.addEventListener('click', (e) => {
+                if (e.target === chatModal) {
+                    chatModal.style.display = 'none';
+                }
+            });
+
+            function sendMessage() {
+                const message = chatInput.value.trim();
+                if (!message) return;
+
+                const msgDiv = document.createElement('div');
+                msgDiv.style.cssText = `
+                    background: rgba(6, 182, 212, 0.2);
+                    padding: 12px;
+                    border-radius: 12px;
+                    margin-bottom: 10px;
+                    border-right: 3px solid var(--primary);
+                    text-align: right;
+                `;
+                msgDiv.innerHTML = `<p style="margin: 0; font-size: 0.9rem; color: var(--text-main);"><strong>You:</strong> ${message}</p>`;
+                chatMessages.appendChild(msgDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                chatInput.value = '';
+                showToast('Message sent to administrator!', 'success');
+
+                // Simulate admin response
+                setTimeout(() => {
+                    const adminMsg = document.createElement('div');
+                    adminMsg.style.cssText = `
+                        background: rgba(255, 255, 255, 0.05);
+                        padding: 12px;
+                        border-radius: 12px;
+                        margin-bottom: 10px;
+                        border-left: 3px solid var(--secondary);
+                    `;
+                    adminMsg.innerHTML = `<p style="margin: 0; font-size: 0.9rem; color: var(--text-main);"><strong>Admin:</strong> Thank you for reaching out. We're reviewing your case and will get back to you shortly.</p>`;
+                    chatMessages.appendChild(adminMsg);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    showToast('Admin responded!', 'info');
+                }, 2000);
+            }
+
+            sendBtn.addEventListener('click', sendMessage);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+        });
+    </script>
+    <style>
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+    </style>
 </body>
 
 </html>

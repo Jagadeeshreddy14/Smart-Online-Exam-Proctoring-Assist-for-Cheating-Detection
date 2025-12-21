@@ -58,6 +58,8 @@ stop_proctoring_flag = False
 Student_Name = ''
 shortcut_flag = False
 shortcut_event_name = ""
+exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
+violation_counts = {} # Tracks counts of specific violations per session
 
 # Result ID Initialization
 def fetch_last_id():
@@ -80,6 +82,37 @@ def stop_proctoring():
     Globalflag = False
     if cap is not None and cap.isOpened():
         cap.release()
+
+def terminate_exam(violation_type, frame=None):
+    global stop_proctoring_flag, Globalflag, exam_status, cap
+    print(f"TERMINATING EXAM: {violation_type}")
+    
+    # Capture evidence frame if not provided
+    if frame is None and cap is not None and cap.isOpened():
+        ret, captured_frame = cap.read()
+        if ret:
+            frame = captured_frame
+            
+    stop_proctoring_flag = True
+    Globalflag = False
+    exam_status['terminated'] = True
+    exam_status['violation_type'] = violation_type
+    
+    if frame is not None:
+        # Save termination evidence image
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"termination_{timestamp}.jpg"
+        cv2.imwrite(filename, frame)
+        try:
+            move_file_to_output_folder(filename, 'Violations')
+            exam_status['evidence_image'] = filename
+            print(f"Evidence saved: {filename}")
+        except Exception as e:
+            print(f"Error saving evidence: {e}")
+    
+    if cap is not None:
+        cap.release()
+        cap = None # Ensure it's cleared
 
 start_time = [0, 0, 0, 0, 0]
 end_time = [0, 0, 0, 0, 0]
@@ -181,7 +214,9 @@ SHORT_WIDTH = 2
 CHUNK = int(RATE * FRAME_SECS)
 CUSHION_FRAMES = int(CUSHION_SECS / FRAME_SECS)
 TIMEOUT_FRAMES = int(TIMEOUT_SECS / FRAME_SECS)
-f_name_directory = 'C:/Users/kaungmyat/PycharmProjects/BestOnlineExamProctor/static/OuputAudios'
+f_name_directory = os.path.join(os.getcwd(), 'static', 'OutputAudios')
+if not os.path.exists(f_name_directory):
+    os.makedirs(f_name_directory)
 # Capture
 cap = None
 
@@ -190,31 +225,57 @@ cap = None
 # function to add data to JSON
 def write_json(new_data, filename='violation.json'):
     global resultId
-    with open(filename,'r+') as file:
-        # First we load existing data into a dict.
-        file_data = json.load(file)
-        # Join new_data with file_data inside emp_details
-        file_data.append(new_data)
-        # Sets file's current position at offset.
-        file.seek(0)
-        # convert back to json.
-        json.dump(file_data, file, indent = 4)
+    file_data = []
+    
+    # Ensure file exists and is initialized
+    if not os.path.exists(filename):
+        with open(filename, 'w') as f:
+            json.dump([], f)
+    
+    try:
+        with open(filename, 'r+') as file:
+            try:
+                # First we load existing data into a list
+                file_data = json.load(file)
+            except json.JSONDecodeError:
+                # If file is empty or malformed
+                file_data = []
+            
+            # Join new_data with file_data
+            file_data.append(new_data)
+            
+            # Sets file's current position at offset 0
+            file.seek(0)
+            file.truncate() # Clear existing content
+            
+            # convert back to json
+            json.dump(file_data, file, indent=4)
+    except Exception as e:
+        print(f"Error writing to {filename}: {e}")
     
     # Increment resultId if we just saved a result
     if filename == 'result.json':
         resultId += 1
 
 #Function to move the files to the Output Folders
-def move_file_to_output_folder(file_name,folder_name='OutputVideos'):
+def move_file_to_output_folder(file_name, folder_name='OutputVideos'):
     # Get the current working directory (project folder)
     current_directory = os.getcwd()
+    # Define the destination directory
+    destination_dir = os.path.join(current_directory, 'static', folder_name)
+    
+    # Ensure the destination folder exists
+    if not os.path.exists(destination_dir):
+        os.makedirs(destination_dir)
+        
     # Define the paths for the source file and destination folder
     source_path = os.path.join(current_directory, file_name)
-    destination_path = os.path.join(current_directory, 'static', folder_name, file_name)
+    destination_path = os.path.join(destination_dir, file_name)
+    
     try:
         # Use 'shutil.move' to move the file to the destination folder
         shutil.move(source_path, destination_path)
-        print('Your video is moved to'+folder_name)
+        print(f"File '{file_name}' moved to 'static/{folder_name}'")
     except FileNotFoundError:
         print(f"Error: File '{file_name}' not found in the project folder.")
     except shutil.Error as e:
@@ -224,7 +285,7 @@ def move_file_to_output_folder(file_name,folder_name='OutputVideos'):
 def reduceBitRate (input_file,output_file):
    target_bitrate = "1000k"  # Set your desired target bitrate here
    # Specify the full path to the FFmpeg executable
-   ffmpeg_path = "C:/Users/kaungmyat/Downloads/ffmpeg-2023-08-28-git-b5273c619d-essentials_build/ffmpeg-2023-08-28-git-b5273c619d-essentials_build/bin/ffmpeg.exe"  # Replace with the actual path to ffmpeg.exe on your system
+   ffmpeg_path = "ffmpeg"  # Assumes ffmpeg is in PATH, or provide relative path
    # Run FFmpeg command to lower the bitrate
    command = [
       ffmpeg_path,
@@ -260,12 +321,18 @@ def faceDetectionRecording(img, text):
             end_time[0] = time.time()
             duration = math.ceil((end_time[0] - start_time[0]) / 3)
             outputVideo = 'FDViolation' + video[0]
+            # Save violation evidence image
+            img_filename = f"violation_{int(time.time())}.jpg"
+            cv2.imwrite(img_filename, img)
+            move_file_to_output_folder(img_filename, 'Violations')
+            
             FDViolation = {
                 "Name": prev_state[0],
                 "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[0])),
                 "Duration": str(duration) + " seconds",
                 "Mark": math.floor(2 * duration),
                 "Link": outputVideo,
+                "Image": img_filename, # Added Image field
                 "RId": get_resultId()
             }
             recorded_durations.append(FDViolation)
@@ -343,12 +410,18 @@ def Head_record_duration(text,img):
                 end_time[1] = time.time()
                 duration = math.ceil((end_time[1] - start_time[1])/7)
                 outputVideo = 'HeadViolation' + video[1]
+                # Save violation evidence image
+                img_filename = f"head_violation_{int(time.time())}.jpg"
+                cv2.imwrite(img_filename, img)
+                move_file_to_output_folder(img_filename, 'Violations')
+                
                 HeadViolation = {
                     "Name": prev_state[1],
                     "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[1])),
                     "Duration": str(duration) + " seconds",
                     "Mark": duration,
                     "Link": outputVideo,
+                    "Image": img_filename, # Added Image field
                     "RId": get_resultId()
                 }
                 recorded_durations.append(HeadViolation)
@@ -398,12 +471,18 @@ def MTOP_record_duration(text, img):
             end_time[2] = time.time()
             duration = math.ceil((end_time[2] - start_time[2])/3)
             outputVideo = 'MTOPViolation' + video[2]
+            # Save violation evidence image
+            img_filename = f"mtop_violation_{int(time.time())}.jpg"
+            cv2.imwrite(img_filename, img)
+            move_file_to_output_folder(img_filename, 'Violations')
+            
             MTOPViolation = {
                 "Name": prev_state[2],
                 "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[2])),
                 "Duration": str(duration) + " seconds",
                 "Mark": math.floor(1.5 * duration),
                 "Link": outputVideo,
+                "Image": img_filename, # Added Image field
                 "RId": get_resultId()
             }
             recorded_durations.append(MTOPViolation)
@@ -447,12 +526,18 @@ def Shortcut_record_duration(text, img):
     if (time.time() - start_time[0]) > 3:
         writer[0].release()
         outputVideo = 'ShortcutViolation' + video[0]
+        # Save violation evidence image
+        img_filename = f"shortcut_violation_{int(time.time())}.jpg"
+        cv2.imwrite(img_filename, img)
+        move_file_to_output_folder(img_filename, 'Violations')
+        
         shortcutViolation = {
             "Name": text,
             "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[0])),
             "Duration": "3 seconds",
             "Mark": 5,
             "Link": outputVideo,
+            "Image": img_filename, # Added Image field
             "RId": get_resultId()
         }
         write_json(shortcutViolation)
@@ -552,12 +637,18 @@ def EDD_record_duration(text, img):
             end_time[4] = time.time()
             duration = math.ceil((end_time[4] - start_time[4])/10)
             outputVideo = 'EDViolation' + video[4]
+            # Save violation evidence image
+            img_filename = f"ed_violation_{int(time.time())}.jpg"
+            cv2.imwrite(img_filename, img)
+            move_file_to_output_folder(img_filename, 'Violations')
+            
             EDViolation = {
                 "Name": prev_state[4],
                 "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[4])),
                 "Duration": str(duration) + " seconds",
                 "Mark": math.floor(1.5 * duration),
                 "Link": outputVideo,
+                "Image": img_filename, # Added Image field
                 "RId": get_resultId()
             }
             recorded_durations.append(EDViolation) # Added this missing append in previous logic if it wasn't there
@@ -815,7 +906,7 @@ def MTOP_Detection(img):
                 cv2.rectangle(img, bbox, (255, 0, 255), 2)
                 # cv2.putText(img, f'{int(detection.score[0] * 100)}%', (bbox[0], bbox[1] - 20), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 10)
             if id > 0:
-                textMTOP = "More than one person is detected."
+                textMTOP = "More than one person detected."
             else:
                 textMTOP = "Only one person is detected"
         else:
@@ -827,7 +918,7 @@ def MTOP_Detection(img):
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
         
         if len(faces) > 1:
-            textMTOP = "More than one person is detected."
+            textMTOP = "More than one person detected."
         elif len(faces) == 1:
             textMTOP = "Only one person is detected"
         else:
@@ -951,24 +1042,39 @@ def screenDetection():
 #Fifth : Electronic Devices Detection Function
 def electronicDevicesDetection(frame):
     global model, EDFlag
-    # Predict on image
-    detect_params = model.predict(source=[frame], conf=0.45, save=False)
-    # Convert tensor array to numpy
-    DP = detect_params[0].numpy()
-    for result in detect_params:  # iterate results
-        boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
-        for box in boxes:  # iterate boxes
-            r = box.xyxy[0].astype(int)  # get corner points as int
-            detected_obj = result.names[int(box.cls[0])]
-            if (detected_obj == 'cell phone' or detected_obj == 'remote' or detected_obj == 'laptop' or detected_obj == 'laptop,book'): EDFlag = True
-    textED = ''
-    # Display the resulting frame
-    if EDFlag:
-        textED = 'Electronic Device Detected'
-    else:
-        textED = "No Electronic Device Detected"
+    textED = "No Electronic Device Detected"
+    
+    try:
+        # Predict on image with lower confidence threshold for better detection
+        detect_params = model.predict(source=[frame], conf=0.3, save=False, verbose=False)
+        
+        for result in detect_params:  # iterate results
+            boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
+            for box in boxes:  # iterate boxes
+                detected_obj = result.names[int(box.cls[0])]
+                confidence = float(box.conf[0])
+                
+                # Log all detections for debugging
+                print(f"YOLO Detected: {detected_obj} (confidence: {confidence:.2f})")
+                
+                # Check for electronic devices (cell phone is the primary target)
+                if detected_obj in ['cell phone', 'remote', 'laptop', 'tv', 'keyboard', 'mouse']:
+                    EDFlag = True
+                    textED = 'Electronic Device Detected'
+                    print(f"⚠️ VIOLATION: {detected_obj} detected with {confidence:.2f} confidence!")
+                    break
+            
+            if EDFlag:
+                break
+                
+    except Exception as e:
+        print(f"Error in electronic device detection: {e}")
+    
+    # Call recording function BEFORE resetting flag
     EDD_record_duration(textED, frame)
-    print(textED)
+    print(f"Device Detection Status: {textED}")
+    
+    # Reset flag for next detection cycle
     EDFlag = False
 
 #Sixth Function : Voice Detection
@@ -1147,16 +1253,18 @@ def cheat_Detection2():
     deleteTrashVideos()
     while Globalflag:
         success, image = cap.read()
-        image1 = image
-        image2 = image
+        if not success:
+            continue
+        image1 = image.copy()
         MTOP_Detection(image1)
         screenDetection()
+        electronicDevicesDetection(image.copy())
         
         if shortcut_flag:
             Shortcut_record_duration(f"Shortcut ({shortcut_event_name}) detected", image)
             shortcut_flag = False
     deleteTrashVideos()
-    if Globalflag:
+    if cap is not None:
         cap.release()
 
 #Query Related

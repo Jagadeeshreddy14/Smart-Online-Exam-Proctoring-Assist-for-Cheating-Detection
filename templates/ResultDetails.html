@@ -243,21 +243,33 @@
 							<td>{{ violation['Duration'] }}</td>
 							<td>
 								{% set Type = violation['Link'].split('.') %}
-								{% if Type[1] == 'mp4' or Type[1] == 'avi' %}
-								{% set VideoInfo = violation['Link']~ ';' ~ resultDetials['Result'][0]['Id'] %}
-								<a href="{{ url_for('adminResultDetailsVideo', videoInfo= VideoInfo) }}"
-									class="btn-download" style="width: fit-content; height: 32px; font-size: 12px;">
-									<i class='bx bxs-video'></i> Watch Video
-								</a>
-								{% elif Type[1] == 'wav' %}
-								<a href="#" class="btn-download"
-									style="width: fit-content; height: 32px; font-size: 12px; background: var(--secondary);"
-									name="{{ violation['Link'] }}" onclick="playAudio(this.name)">
-									<i class='bx bxs-volume-full'></i> Play Audio
-								</a>
-								{% else %}
-								<span style="color: var(--text-muted);">No Evidence</span>
-								{% endif %}
+								<div style="display: flex; flex-direction: column; gap: 8px;">
+									{% if Type[1] == 'mp4' or Type[1] == 'avi' %}
+									{% set VideoInfo = violation['Link']~ ';' ~ resultDetials['Result'][0]['Id'] %}
+									<a href="{{ url_for('adminResultDetailsVideo', videoInfo= VideoInfo) }}"
+										class="btn-download" style="width: fit-content; height: 32px; font-size: 11px;">
+										<i class='bx bxs-video'></i> Watch Video
+									</a>
+									{% elif Type[1] == 'wav' %}
+									<a href="#" class="btn-download"
+										style="width: fit-content; height: 32px; font-size: 11px; background: var(--secondary);"
+										name="{{ violation['Link'] }}" onclick="playAudio(this.name)">
+										<i class='bx bxs-volume-full'></i> Play Audio
+									</a>
+									{% endif %}
+
+									{% if violation['Image'] %}
+									<a href="{{ url_for('static', filename='Violations/' + violation['Image']) }}"
+										target="_blank" class="btn-download"
+										style="width: fit-content; height: 32px; font-size: 11px; background: #6366f1;">
+										<i class='bx bxs-image'></i> View Snapshot
+									</a>
+									{% endif %}
+
+									{% if not violation['Image'] and not Type[1] in ['mp4', 'avi', 'wav'] %}
+									<span style="color: var(--text-muted); font-size: 12px;">No evidence file</span>
+									{% endif %}
+								</div>
 							</td>
 						</tr>
 						{% endfor %}

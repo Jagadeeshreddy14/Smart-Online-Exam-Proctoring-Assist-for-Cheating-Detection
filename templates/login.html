@@ -5,6 +5,7 @@
 	<title>Animated Login Form</title>
 	<link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/login.css')}}">
 	<link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/all.min.css')}}">
+	<link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/chat.css')}}">
 	<link href="https://fonts.googleapis.com/css?family=Poppins:600&display=swap" rel="stylesheet">
 	<script src="https://kit.fontawesome.com/a81368914c.js"></script>
 
@@ -57,13 +58,36 @@
 
 				<!-- Google Login Button -->
 				<a href="{{url_for('google_login')}}" class="google-btn">
-					<img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg" alt="Google logo" style="width: 20px; height: 20px; margin-right: 10px;">
+					<img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg" alt="Google logo"
+						style="width: 20px; height: 20px; margin-right: 10px;">
 					Sign in with Google
 				</a>
 			</form>
 		</div>
 	</div>
+	<!-- Chat Widget -->
+	<button class="chat-btn" id="chatBtn"></button>
+
+	<div class="chat-widget">
+		<div class="chat-header">
+			<h3>Exam Helper AI</h3>
+			<button class="close-chat">&times;</button>
+		</div>
+		<div class="chat-body">
+			<div class="message bot">
+				Hello! Welcome to the Online Exam Portal. If you have any trouble logging in, please let me know.
+			</div>
+		</div>
+		<div class="chat-footer">
+			<input type="text" id="chatInput" placeholder="Type your doubt...">
+			<button id="micBtn"><i class="fas fa-microphone"></i></button>
+			<button id="sendBtn">➤</button>
+		</div>
+	</div>
+
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 	<script type="text/javascript" src="{{url_for('static', filename='js/login.js')}}"></script>
+	<script type="text/javascript" src="{{url_for('static', filename='js/chat.js')}}"></script>
 </body>
 
 </html>

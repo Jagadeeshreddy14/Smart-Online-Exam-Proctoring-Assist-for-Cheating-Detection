@@ -19,6 +19,49 @@ var recordedChunks = [];
 var userLocation = { latitude: null, longitude: null };
 var examSessionId = "session_" + Date.now();
 
+// Toast notification function
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'linear-gradient(135deg, #10b981, #059669)' :
+        type === 'error' ? 'linear-gradient(135deg, #ef4444, #dc2626)' :
+            type === 'warning' ? 'linear-gradient(135deg, #f59e0b, #d97706)' :
+                'linear-gradient(135deg, #06b6d4, #0891b2)';
+
+    toast.style.cssText = `
+        background: ${bgColor};
+        color: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 300px;
+        animation: slideIn 0.3s ease;
+        font-weight: 600;
+    `;
+
+    const icon = type === 'success' ? 'bx-check-circle' :
+        type === 'error' ? 'bx-error-circle' :
+            type === 'warning' ? 'bx-error' :
+                'bx-info-circle';
+
+    toast.innerHTML = `
+        <i class='bx ${icon}' style="font-size: 1.5rem;"></i>
+        <span style="flex: 1;">${message}</span>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 // Get location as soon as possible and enforce it
 function requestLocation() {
     if (navigator.geolocation) {
@@ -49,19 +92,71 @@ for (var i = 0; i < 4; i++) {
 
 //Start Quiz function
 function startQuiz() {
-
-    var elem = document.documentElement;
-    if (elem.requestFullscreen) {
-        elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) { /* Safari */
-        elem.webkitRequestFullscreen();
-    } else if (elem.msRequestFullscreen) { /* IE11 */
-        elem.msRequestFullscreen();
-    }
-
     startTimer();
     buildQuestion();
     startScreenRecording();
+    setupFullscreenMonitoring();
+
+    // Show live camera preview
+    const cameraPreview = document.getElementById('cameraPreview');
+    if (cameraPreview) {
+        cameraPreview.style.display = 'block';
+    }
+}
+
+function setupFullscreenMonitoring() {
+    // Monitor for fullscreen exit
+    document.onfullscreenchange = document.onwebkitfullscreenchange = document.onmsfullscreenchange = function () {
+        const isFS = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+
+        // Only trigger if quiz is active and not finished
+        if (!isFS && secondsLeft > 0 && questionIndex <= totalQuestions - 1) {
+            console.warn("Fullscreen violation detected!");
+            showToast('⚠️ Fullscreen Exit Detected! Violation logged.', 'error');
+            // Report violation to backend - the backend will decide if it's a warning or termination
+            reportViolation("Fullscreen Exit", "User manually exited fullscreen mode");
+        }
+    };
+}
+
+function reportViolation(type, details) {
+    $.ajax({
+        type: "POST",
+        url: "/api/violation",
+        contentType: "application/json",
+        data: JSON.stringify({
+            type: type,
+            details: details,
+            sessionId: examSessionId
+        }),
+        success: function (response) {
+            console.log("Violation response:", response.action);
+            if (response.action === "warning") {
+                // First time warning - alert will serve as user gesture for re-requesting FS
+                showToast('⚠️ FINAL WARNING: ' + response.message, 'warning');
+                alert("ATTENTION: " + response.message);
+
+                // Re-request fullscreen after alert is dismissed
+                const elem = document.documentElement;
+                const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
+                if (requestFS) {
+                    requestFS.call(elem).then(() => {
+                        showToast('Fullscreen restored ✅', 'success');
+                    }).catch(() => {
+                        console.error("Auto-restoration of fullscreen failed.");
+                        showToast('Failed to restore fullscreen!', 'error');
+                    });
+                }
+            } else if (response.action === "terminated") {
+                // Second time (or other critical) - terminate immediately
+                showToast('Exam terminated due to violations!', 'error');
+                setTimeout(() => window.location.href = "/exam_terminated", 1000);
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error("Failed to log violation:", error);
+        }
+    });
 }
 
 async function startScreenRecording() {
@@ -87,10 +182,51 @@ async function startScreenRecording() {
 
         mediaRecorder.start();
         console.log("Screen recording started");
+
+        // TRIGGER FULLSCREEN AFTER SCREEN SHARE SUCCESS
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().then(() => {
+                showToast('Fullscreen mode activated', 'success');
+            }).catch(err => {
+                console.log("Full screen denied:", err);
+                showToast('Fullscreen denied - please enable it', 'warning');
+            });
+        } else if (elem.webkitRequestFullscreen) {
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) {
+            elem.msRequestFullscreen();
+        }
+
+        // Start polling for exam status (to handle backend termination)
+        startStatusPolling();
     } catch (err) {
         console.error("Error starting screen recording:", err);
         alert("Screen recording is required for this exam. Please allow screen sharing.");
     }
+}
+
+function startStatusPolling() {
+    const statusInterval = setInterval(function () {
+        if (secondsLeft <= 0 || questionIndex > totalQuestions - 1) {
+            clearInterval(statusInterval);
+            return;
+        }
+
+        $.ajax({
+            type: "GET",
+            url: "/check_exam_status",
+            success: function (response) {
+                if (response.status === 'terminated') {
+                    clearInterval(statusInterval);
+                    window.location.href = "/exam_terminated";
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error("Status check failed:", error);
+            }
+        });
+    }, 3000); // Check every 3 seconds
 }
 
 function uploadRecording(blob) {
@@ -278,17 +414,6 @@ function storeScores(event){
 //Start button event listener on start page which starts quiz
 $(document).ready(function () {
     startButton.addEventListener("click", function () {
-
-        // Trigger Full Screen immediately on user click
-        var elem = document.documentElement;
-        if (elem.requestFullscreen) {
-            elem.requestFullscreen().catch(err => console.log("Full screen denied:", err));
-        } else if (elem.webkitRequestFullscreen) { /* Safari */
-            elem.webkitRequestFullscreen();
-        } else if (elem.msRequestFullscreen) { /* IE11 */
-            elem.msRequestFullscreen();
-        }
-
         $.ajax({
             type: "POST",
             url: "/exam",
@@ -299,7 +424,6 @@ $(document).ready(function () {
             },
             error: function (xhr, status, error) {
                 console.error("Failed to start exam session:", error);
-                // Even if the initial call fails, let's try starting the quiz
                 startQuiz();
             }
         });

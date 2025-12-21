@@ -526,8 +526,9 @@ def exam():
     utils.stop_proctoring_flag = False
     utils.Globalflag = True
     
-    # Reset exam status
-    utils.exam_status = {'terminated': False, 'violation_type': ''}
+    # Reset exam status and violation history
+    utils.violation_counts = {}
+    utils.exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
     
     # Start proctoring logic threads
     start_loop()
@@ -660,6 +661,55 @@ def upload_recording():
     file.save(os.path.join(recording_dir, filename))
     
     return jsonify({"success": True, "filename": filename})
+
+@app.route('/api/violation', methods=['POST'])
+def report_violation():
+    """Handle violations reported from frontend (e.g. Fullscreen Exit)."""
+    data = request.json
+    violation_type = data.get('type', 'Unknown Violation')
+    details = data.get('details', '')
+    
+    print(f"Violation reported from frontend: {violation_type} - {details}")
+    
+    # Increment violation count
+    utils.violation_counts[violation_type] = utils.violation_counts.get(violation_type, 0) + 1
+    count = utils.violation_counts[violation_type]
+    
+    # Capture evidence frame if possible
+    img_filename = None
+    if utils.cap is not None and utils.cap.isOpened():
+        ret, frame = utils.cap.read()
+        if ret:
+            img_filename = f"api_violation_{int(time.time())}.jpg"
+            cv2.imwrite(img_filename, frame)
+            utils.move_file_to_output_folder(img_filename, 'Violations')
+
+    # Log to violation.json
+    violation_entry = {
+        "Name": violation_type,
+        "Time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "Duration": "N/A",
+        "Mark": 10, # Arbitrary mark for now
+        "Link": f"{details} (Count: {count})",
+        "Image": img_filename, # Added Image field
+        "RId": utils.get_resultId()
+    }
+    utils.write_json(violation_entry, 'violation.json')
+    
+    # Graduated enforcement logic
+    if violation_type == "Fullscreen Exit":
+        if count >= 2:
+            utils.terminate_exam(violation_type)
+            return jsonify({"success": True, "action": "terminated"})
+        else:
+            return jsonify({"success": True, "action": "warning", "message": "First warning: Fullscreen is mandatory. Next exit will terminate your exam."})
+    
+    # Critical violations (like phone detection) trigger immediate termination
+    if violation_type in ["Mobile Phone Detected", "Electronic Device"]:
+        utils.terminate_exam(violation_type)
+        return jsonify({"success": True, "action": "terminated"})
+        
+    return jsonify({"success": True, "action": "logged"})
 
 @app.route('/showResultPass/<result_status>')
 def showResultPass(result_status):
@@ -892,7 +942,8 @@ def insertStudent():
 def exam_terminated():
     """Exam terminated page."""
     violation_type = utils.exam_status.get('violation_type', 'Unknown Violation')
-    return render_template('ExamTerminated.html', violation_type=violation_type)
+    evidence_image = utils.exam_status.get('evidence_image', '')
+    return render_template('ExamTerminated.html', violation_type=violation_type, evidence_image=evidence_image)
 
 @app.route('/check_exam_status', methods=['GET'])
 def check_exam_status():
