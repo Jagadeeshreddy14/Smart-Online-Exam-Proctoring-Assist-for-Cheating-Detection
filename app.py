@@ -609,8 +609,8 @@ def examAction():
             lon = location.get('longitude', 'Unknown')
             sessionId = examData.get('sessionId', 'Unknown')
 
-            # Save result
-            utils.write_json({
+            # Save result to JSON
+            result_entry = {
                 "Id": utils.get_resultId(),
                 "Name": current_student['Name'],
                 "TotalMark": totalMark,
@@ -622,7 +622,18 @@ def examAction():
                 "StartTime": time.strftime("%H:%M:%S"),
                 "Location": f"{lat}, {lon}",
                 "SessionId": sessionId
-            }, "result.json")
+            }
+            utils.write_json(result_entry, "result.json")
+
+            # Save result to MongoDB
+            try:
+                mongo.db.results.update_one(
+                    {"Id": result_entry["Id"]},
+                    {"$set": result_entry},
+                    upsert=True
+                )
+            except Exception as e:
+                print(f"Error saving result to MongoDB: {e}")
             
             resultStatus = f"{current_student['Name']};{totalMark};{status};{time.strftime('%Y-%m-%d', time.localtime(time.time()))}"
         else:
@@ -778,11 +789,20 @@ def live_monitoring():
 
 @app.route('/adminResultDetailsVideo/<videoInfo>')
 def adminResultDetailsVideo(videoInfo):
-    """Video evidence viewing page."""
+    """Admin result details video page."""
     if 'user_id' not in session or session.get('user_role') != 'ADMIN':
         flash('Please login as an admin first.', 'error')
         return redirect(url_for('main'))
     return render_template('ResultDetailsVideo.html', videoInfo=videoInfo)
+
+@app.route('/adminFullRecording/<sessionId>')
+def adminFullRecording(sessionId):
+    """Admin full session recording page."""
+    if 'user_id' not in session or session.get('user_role') != 'ADMIN':
+        flash('Please login as an admin first.', 'error')
+        return redirect(url_for('main'))
+    
+    return render_template('FullRecording.html', sessionId=sessionId)
 
 @app.route('/adminProfile')
 def adminProfile():

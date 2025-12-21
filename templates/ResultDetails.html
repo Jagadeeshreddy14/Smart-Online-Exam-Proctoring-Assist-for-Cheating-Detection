@@ -162,6 +162,11 @@
 								</h2>
 								<p style="color: var(--text-muted);">Result ID: #{{ resultDetials['Result'][0]['Id'] }}
 								</p>
+								<p style="color: var(--text-muted); font-size: 14px;">
+									<i class='bx bxs-map-pin' style="color: var(--accent);"></i> Location: {{
+									resultDetials['Result'][0]['Location'] if resultDetials['Result'][0]['Location']
+									else 'N/A' }}
+								</p>
 							</div>
 						</div>
 
@@ -190,103 +195,114 @@
 									Score</span>
 								<span style="font-size: 18px; font-weight: 700; color: var(--primary);">{{
 									resultDetials['Result'][0]['TrustScore'] }}%</span>
-							</div>
-							<div
-								style="text-align: center; padding: 10px 20px; background: rgba(255,255,255,0.05); border-radius: 12px;">
-								<span style="display: block; font-size: 14px; color: var(--text-muted);">Total
-									Score</span>
 								<span style="font-size: 18px; font-weight: 700; color: var(--secondary);">{{
 									resultDetials['Result'][0]['TotalMark'] }}%</span>
 							</div>
 						</div>
 					</div>
 
-					<h3 style="margin: 20px 0; color: var(--text-main);">Violation Records</h3>
-					<table>
-						<thead>
-							<tr>
-								<th>Violation Type</th>
-								<th>Timestamp</th>
-								<th>Duration</th>
-								<th>Evidence</th>
-							</tr>
-						</thead>
-						<tbody>
-							{% if resultDetials['Violation']|length %}
-							{% for violation in resultDetials['Violation'] %}
-							<tr>
-								<td>
-									<span style="color: var(--accent); font-weight: 500;">
-										<i class='bx bxs-error-circle'></i> {{ violation['Name'] }}
-									</span>
-								</td>
-								<td>
-									{{ violation['Time'] }}
-								</td>
-								<td>{{ violation['Duration'] }}</td>
-								<td>
-									{% set Type = violation['Link'].split('.') %}
-									{% if Type[1] == 'mp4' or Type[1] == 'avi' %}
-									{% set VideoInfo = violation['Link']~ ';' ~ resultDetials['Result'][0]['Id'] %}
-									<a href="{{ url_for('adminResultDetailsVideo', videoInfo= VideoInfo) }}"
-										class="btn-download" style="width: fit-content; height: 32px; font-size: 12px;">
-										<i class='bx bxs-video'></i> Watch Video
-									</a>
-									{% elif Type[1] == 'wav' %}
-									<a href="#" class="btn-download"
-										style="width: fit-content; height: 32px; font-size: 12px; background: var(--secondary);"
-										name="{{ violation['Link'] }}" onclick="playAudio(this.name)">
-										<i class='bx bxs-volume-full'></i> Play Audio
-									</a>
-									{% else %}
-									<span style="color: var(--text-muted);">No Evidence</span>
-									{% endif %}
-								</td>
-							</tr>
-							{% endfor %}
-							{% else %}
-							<tr>
-								<td colspan="4" style="text-align: center; padding: 40px;">
-									<i class='bx bxs-check-shield'
-										style="font-size: 48px; color: var(--success, #4ade80); margin-bottom: 10px;"></i>
-									<p style="color: var(--text-muted);">Clean Record. No violations detected.</p>
-								</td>
-							</tr>
-							{% endif %}
-
-						</tbody>
-						</tbody>
-					</table>
-
-					<!-- Suspicion Graph Section -->
-					{% if resultDetials['Result'][0]['SuspicionLog'] %}
-					<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Suspicious Behavior Analysis</h3>
-					<div class="glass-panel" style="padding: 20px;">
-						<canvas id="suspicionChart" style="width:100%; height:300px;"></canvas>
+					<div style="margin-left: 20px;">
+						{% if resultDetials['Result'][0]['SessionId'] %}
+						<a href="{{ url_for('adminFullRecording', sessionId=resultDetials['Result'][0]['SessionId']) }}"
+							class="btn btn-primary"
+							style="display: flex; align-items: center; gap: 8px; border-radius: 50px; padding: 10px 20px;">
+							<i class='bx bxs-video-recording' style="font-size: 20px;"></i>
+							Watch Full Screen Recording
+						</a>
+						{% else %}
+						<button class="btn btn-secondary" disabled style="border-radius: 50px; opacity: 0.5;">
+							<i class='bx bxs-video-off'></i> No Screen Recording
+						</button>
+						{% endif %}
 					</div>
-					{% endif %}
+				</div>
 
-					<!-- Chat History Section -->
-					{% if resultDetials['Result'][0]['ChatHistory'] %}
-					<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Chat History</h3>
-					<div class="glass-panel" style="padding: 20px; max-height: 400px; overflow-y: auto;">
-						{% for chat in resultDetials['Result'][0]['ChatHistory'] %}
-						<div
-							style="margin-bottom: 10px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if chat.sender == 'User' else 'flex-start' }};">
-							<div style="max-width: 70%; padding: 10px 15px; border-radius: 12px; font-size: 0.9rem; 
+				<h3 style="margin: 20px 0; color: var(--text-main);">Violation Records</h3>
+				<table>
+					<thead>
+						<tr>
+							<th>Violation Type</th>
+							<th>Timestamp</th>
+							<th>Duration</th>
+							<th>Evidence</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% if resultDetials['Violation']|length %}
+						{% for violation in resultDetials['Violation'] %}
+						<tr>
+							<td>
+								<span style="color: var(--accent); font-weight: 500;">
+									<i class='bx bxs-error-circle'></i> {{ violation['Name'] }}
+								</span>
+							</td>
+							<td>
+								{{ violation['Time'] }}
+							</td>
+							<td>{{ violation['Duration'] }}</td>
+							<td>
+								{% set Type = violation['Link'].split('.') %}
+								{% if Type[1] == 'mp4' or Type[1] == 'avi' %}
+								{% set VideoInfo = violation['Link']~ ';' ~ resultDetials['Result'][0]['Id'] %}
+								<a href="{{ url_for('adminResultDetailsVideo', videoInfo= VideoInfo) }}"
+									class="btn-download" style="width: fit-content; height: 32px; font-size: 12px;">
+									<i class='bx bxs-video'></i> Watch Video
+								</a>
+								{% elif Type[1] == 'wav' %}
+								<a href="#" class="btn-download"
+									style="width: fit-content; height: 32px; font-size: 12px; background: var(--secondary);"
+									name="{{ violation['Link'] }}" onclick="playAudio(this.name)">
+									<i class='bx bxs-volume-full'></i> Play Audio
+								</a>
+								{% else %}
+								<span style="color: var(--text-muted);">No Evidence</span>
+								{% endif %}
+							</td>
+						</tr>
+						{% endfor %}
+						{% else %}
+						<tr>
+							<td colspan="4" style="text-align: center; padding: 40px;">
+								<i class='bx bxs-check-shield'
+									style="font-size: 48px; color: var(--success, #4ade80); margin-bottom: 10px;"></i>
+								<p style="color: var(--text-muted);">Clean Record. No violations detected.</p>
+							</td>
+						</tr>
+						{% endif %}
+
+					</tbody>
+					</tbody>
+				</table>
+
+				<!-- Suspicion Graph Section -->
+				{% if resultDetials['Result'][0]['SuspicionLog'] %}
+				<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Suspicious Behavior Analysis</h3>
+				<div class="glass-panel" style="padding: 20px;">
+					<canvas id="suspicionChart" style="width:100%; height:300px;"></canvas>
+				</div>
+				{% endif %}
+
+				<!-- Chat History Section -->
+				{% if resultDetials['Result'][0]['ChatHistory'] %}
+				<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Chat History</h3>
+				<div class="glass-panel" style="padding: 20px; max-height: 400px; overflow-y: auto;">
+					{% for chat in resultDetials['Result'][0]['ChatHistory'] %}
+					<div
+						style="margin-bottom: 10px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if chat.sender == 'User' else 'flex-start' }};">
+						<div style="max-width: 70%; padding: 10px 15px; border-radius: 12px; font-size: 0.9rem; 
                                         background: {{ 'var(--primary)' if chat.sender == 'User' else 'rgba(255,255,255,0.1)' }}; 
                                         color: {{ '#fff' if chat.sender == 'User' else 'var(--text-main)' }};
                                         border-bottom-{{ 'right' if chat.sender == 'User' else 'left' }}-radius: 2px;">
-								{{ chat.message }}
-							</div>
-							<span style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-								{{ chat.sender }} • {{ chat.time }}
-							</span>
+							{{ chat.message }}
 						</div>
-						{% endfor %}
+						<span style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+							{{ chat.sender }} • {{ chat.time }}
+						</span>
 					</div>
-					{% endif %}
+					{% endfor %}
 				</div>
+				{% endif %}
+			</div>
 			</div>
 		</main>
 		<!-- MAIN -->
@@ -301,18 +317,27 @@
 		</div>
 	</div>
 
-	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 	<script>
 		// Close the modal when clicking outside or on the "Ok, Close" button
-		overlay.addEventListener("click", () => {
-			section.classList.remove("active");
-			audio.pause();
-		});
-		closeBtn.addEventListener("click", () => {
-			section.classList.remove("active");
-			audio.pause();
-		});
-		};
+		const audioModal = document.getElementById("audioModal");
+		const audioContainer = document.getElementById("audioContainer");
+
+		function playAudio(audioFile) {
+			const audioPath = "{{ url_for('static', filename='OutputVideos/') }}" + audioFile;
+			audioContainer.innerHTML = `<audio controls autoplay style="width: 100%;"><source src="${audioPath}" type="audio/wav"></audio>`;
+			audioModal.style.display = "block";
+		}
+
+		function closeAudioModal() {
+			audioModal.style.display = "none";
+			audioContainer.innerHTML = "";
+		}
+
+		window.onclick = function (event) {
+			if (event.target == audioModal) {
+				closeAudioModal();
+			}
+		}
 	</script>
 </body>
 
