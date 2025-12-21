@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+	<!-- Boxicons -->
+	<link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
+	<!-- CSS -->
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+	<link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+	<link rel="stylesheet" href="{{url_for('static', filename='css/admin.css')}}">
+
+	<title>Exam Results | Admin Dashboard</title>
+</head>
+
+<body>
+
+	<!-- SIDEBAR -->
+	<section id="sidebar">
+		<a href="#" class="brand">
+			<i class='bx bxs-smile'></i>
+			<span class="text">Admin Dashboard</span>
+		</a>
+		<ul class="side-menu top">
+			<li>
+				<a href="{{url_for('adminStudents')}}">
+					<i class='bx bxs-group'></i>
+					<span class="text">Students</span>
+				</a>
+			</li>
+			<li class="active">
+				<a href="{{url_for('adminResults')}}">
+					<i class='bx bxs-graduation'></i>
+					<span class="text">Exam Results</span>
+				</a>
+			</li>
+			<li>
+				<a href="{{url_for('logout')}}">
+					<i class='bx bxs-log-out-circle'></i>
+					<span class="text">Logout</span>
+				</a>
+			</li>
+		</ul>
+	</section>
+
+	<!-- CONTENT -->
+	<section id="content">
+		<!-- NAVBAR -->
+		<nav>
+			<i class='bx bx-menu'></i>
+			<span class="text">The Online Exam Proctor</span>
+			<div>
+				<a href="{{url_for('adminProfile')}}">
+					<i class='bx bxs-user'></i>
+					<span class="text">Profile</span>
+				</a>
+			</div>
+		</nav>
+		<!-- NAVBAR -->
+
+		<!-- MAIN -->
+		<main>
+			<div class="head-title">
+				<div class="left">
+					<h1>Exam Results</h1>
+					<ul class="breadcrumb">
+						<li>
+							<a href="#">Dashboard</a>
+						</li>
+						<li><i class='bx bx-chevron-right'></i></li>
+						<li>
+							<a class="active" href="#">Exam Results</a>
+						</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="table-data">
+				<div class="order">
+					<div class="head">
+						<h3>Exam Result Records</h3>
+					</div>
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Date</th>
+								<th>Status</th>
+								<th>Total Mark</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for result in results %}
+							<tr>
+								<td>
+									<div style="display: flex; align-items: center;">
+										<div
+											style="width: 36px; height: 36px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin-right: 12px;">
+											<i class='bx bxs-user'></i>
+										</div>
+										<p style="margin: 0; font-weight: 500;">{{ result['Name'] }}</p>
+									</div>
+								</td>
+								<td>{{ result['Date'] }} </td>
+								<td>
+									{% set statusClass = "status-completed" if result['Status']=='Pass' else
+									"status-pending" %}
+									<span
+										style="padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; 
+                                        {% if result['Status'] == 'Pass' %} background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3);
+                                        {% else %} background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); {% endif %}">
+										{{ result['Status'] }}
+									</span>
+								</td>
+								<td>{{ result['TotalMark'] }}% </td>
+								<td>
+									<a href="{{ url_for('adminResultDetails', id=result['Id']) }}" class="btn-download"
+										style="text-decoration: none; width: fit-content; height: 32px; font-size: 12px;">
+										Details <i class='bx bx-right-arrow-alt'></i>
+									</a>
+								</td>
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</main>
+		<!-- MAIN -->
+	</section>
+	<!-- CONTENT -->
+
+	<script src="{{url_for('static', filename='js/TrStudent.js')}}"></script>
+</body>
+
+</html>

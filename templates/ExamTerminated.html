@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Terminated</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            padding: 40px;
+            background: rgba(239, 68, 68, 0.1);
+            /* Red tint */
+            border: 1px solid var(--danger);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            color: var(--danger);
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            color: var(--text-main);
+        }
+
+        .evidence-box {
+            margin: 20px 0;
+            border: 2px solid var(--danger);
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        img {
+            width: 100%;
+            display: block;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: var(--danger);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1><i class='bx bxs-error-circle'></i> Exam Terminated</h1>
+        <p>Your exam has been automatically terminated due to a detected violation.</p>
+
+        <div class="evidence-box">
+            <!-- Correctly link to the captured evidence image -->
+            <img src="{{ url_for('static', filename='OutputVideos/violation_evidence.jpg') }}" alt="Violation Evidence">
+        </div>
+
+        <p style="font-size: 0.9rem; color: var(--text-muted);">
+            Type: <strong>{{ violation_type }}</strong><br>
+            An automatic notification has been sent to the administrator.
+        </p>
+
+        <a href="/" class="btn">Return to Home</a>
+    </div>
+</body>
+
+</html>

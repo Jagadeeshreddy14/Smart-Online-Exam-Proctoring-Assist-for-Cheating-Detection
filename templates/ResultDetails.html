@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+	<!-- Boxicons -->
+	<link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
+	<!-- CSS -->
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+	<link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+	<link rel="stylesheet" href="{{url_for('static', filename='css/admin.css')}}">
+	<!-- Inline audio styles minimal replacement -->
+	<style>
+		.sec1.active {
+			display: flex;
+		}
+
+		.sec1 {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			justify-content: center;
+			align-items: center;
+			z-index: 2000;
+		}
+
+		.overlay1 {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.6);
+			backdrop-filter: blur(5px);
+		}
+
+		.modal-box {
+			background: var(--bg-dark);
+			border: 1px solid var(--glass-border);
+			padding: 30px;
+			border-radius: 16px;
+			z-index: 2001;
+			text-align: center;
+			box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+		}
+
+		.modal-box h2 {
+			color: var(--text-main);
+			margin: 20px 0;
+		}
+
+		.close-btn {
+			background: var(--secondary);
+			color: white;
+			border: none;
+			padding: 8px 20px;
+			border-radius: 8px;
+			margin-top: 20px;
+			cursor: pointer;
+		}
+	</style>
+
+	<title>Result Details | Admin Dashboard</title>
+</head>
+
+<body>
+
+	<!-- SIDEBAR -->
+	<section id="sidebar">
+		<a href="#" class="brand">
+			<i class='bx bxs-smile'></i>
+			<span class="text">Admin Dashboard</span>
+		</a>
+		<ul class="side-menu top">
+			<li>
+				<a href="{{url_for('adminStudents')}}">
+					<i class='bx bxs-group'></i>
+					<span class="text">Students</span>
+				</a>
+			</li>
+			<li class="active">
+				<a href="{{url_for('adminResults')}}">
+					<i class='bx bxs-graduation'></i>
+					<span class="text">Exam Results</span>
+				</a>
+			</li>
+			<li>
+				<a href="{{url_for('logout')}}">
+					<i class='bx bxs-log-out-circle'></i>
+					<span class="text">Logout</span>
+				</a>
+			</li>
+		</ul>
+	</section>
+	<!-- SIDEBAR -->
+
+	<!-- CONTENT -->
+	<section id="content">
+		<!-- NAVBAR -->
+		<nav>
+			<i class='bx bx-menu'></i>
+			<span class="text">The Online Exam Proctor</span>
+			<div>
+				<a href="{{url_for('adminProfile')}}">
+					<i class='bx bxs-user'></i>
+					<span class="text">Profile</span>
+				</a>
+			</div>
+		</nav>
+		<!-- NAVBAR -->
+
+		<!-- MAIN -->
+		<main>
+			<div class="head-title">
+				<div class="left">
+					<h1>Result Breakdown</h1>
+					<ul class="breadcrumb">
+						<li>
+							<a href="#">Dashboard</a>
+						</li>
+						<li><i class='bx bx-chevron-right'></i></li>
+						<li>
+							<a href="{{url_for('adminResults')}}">Results</a>
+						</li>
+						<li><i class='bx bx-chevron-right'></i></li>
+						<li>
+							<a class="active" href="#">{{resultDetials['Result'][0]['Name']}}</a>
+						</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="table-data">
+				<div class="order">
+					<div class="head">
+						<h3>Student Performance</h3>
+					</div>
+
+					<!-- Student Info Card -->
+					<div class="glass-panel"
+						style="padding: 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+						<div style="display: flex; align-items: center;">
+							<!-- Profile Image Fallback -->
+							<div
+								style="width: 80px; height: 80px; border-radius: 50%; overflow: hidden; border: 2px solid var(--primary); margin-right: 20px;">
+								{% if resultDetials['Result'][0]['Link'] %}
+								<img src="{{ url_for('static', filename='Profiles/') }}{{ resultDetials['Result'][0]['Link'] }}"
+									onerror="this.src='https://via.placeholder.com/80/0f172a/06b6d4?text=User'"
+									style="width: 100%; height: 100%; object-fit: cover;">
+								{% else %}
+								<div
+									style="width: 100%; height: 100%; background: var(--glass-highlight); display: flex; align-items: center; justify-content: center;">
+									<i class='bx bxs-user' style="font-size: 40px; color: var(--text-muted);"></i>
+								</div>
+								{% endif %}
+							</div>
+							<div>
+								<h2 style="color: var(--text-main); margin: 0;">{{ resultDetials['Result'][0]['Name'] }}
+								</h2>
+								<p style="color: var(--text-muted);">Result ID: #{{ resultDetials['Result'][0]['Id'] }}
+								</p>
+							</div>
+						</div>
+
+						<div style="display: flex; gap: 20px;">
+							<div
+								style="text-align: center; padding: 10px 20px; background: rgba(255,255,255,0.05); border-radius: 12px;">
+								<span style="display: block; font-size: 14px; color: var(--text-muted);">Status</span>
+								<div class="header-actions">
+									<span
+										class="status-badge status-{{ 'pass' if resultDetials['Result'][0]['TotalMark'] >= 50 else 'fail' }}">
+										{{ 'Passed' if resultDetials['Result'][0]['TotalMark'] >= 50 else 'Failed' }}
+									</span>
+
+									<!-- Enable Retest Button -->
+									<a href="{{ url_for('enable_retest', id=resultDetials['Result'][0]['Id']) }}"
+										class="btn btn-warning"
+										style="margin-left: 10px; color: #fff; background: var(--secondary); border: none;"
+										onclick="return confirm('Are you sure? This will delete the current result and allow the student to retake the exam.');">
+										<i class='bx bx-refresh'></i> Enable Retest
+									</a>
+								</div>
+							</div>
+							<div
+								style="text-align: center; padding: 10px 20px; background: rgba(255,255,255,0.05); border-radius: 12px;">
+								<span style="display: block; font-size: 14px; color: var(--text-muted);">Trust
+									Score</span>
+								<span style="font-size: 18px; font-weight: 700; color: var(--primary);">{{
+									resultDetials['Result'][0]['TrustScore'] }}%</span>
+							</div>
+							<div
+								style="text-align: center; padding: 10px 20px; background: rgba(255,255,255,0.05); border-radius: 12px;">
+								<span style="display: block; font-size: 14px; color: var(--text-muted);">Total
+									Score</span>
+								<span style="font-size: 18px; font-weight: 700; color: var(--secondary);">{{
+									resultDetials['Result'][0]['TotalMark'] }}%</span>
+							</div>
+						</div>
+					</div>
+
+					<h3 style="margin: 20px 0; color: var(--text-main);">Violation Records</h3>
+					<table>
+						<thead>
+							<tr>
+								<th>Violation Type</th>
+								<th>Timestamp</th>
+								<th>Duration</th>
+								<th>Evidence</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% if resultDetials['Violation']|length %}
+							{% for violation in resultDetials['Violation'] %}
+							<tr>
+								<td>
+									<span style="color: var(--accent); font-weight: 500;">
+										<i class='bx bxs-error-circle'></i> {{ violation['Name'] }}
+									</span>
+								</td>
+								<td>
+									{{ violation['Time'] }}
+								</td>
+								<td>{{ violation['Duration'] }}</td>
+								<td>
+									{% set Type = violation['Link'].split('.') %}
+									{% if Type[1] == 'mp4' or Type[1] == 'avi' %}
+									{% set VideoInfo = violation['Link']~ ';' ~ resultDetials['Result'][0]['Id'] %}
+									<a href="{{ url_for('adminResultDetailsVideo', videoInfo= VideoInfo) }}"
+										class="btn-download" style="width: fit-content; height: 32px; font-size: 12px;">
+										<i class='bx bxs-video'></i> Watch Video
+									</a>
+									{% elif Type[1] == 'wav' %}
+									<a href="#" class="btn-download"
+										style="width: fit-content; height: 32px; font-size: 12px; background: var(--secondary);"
+										name="{{ violation['Link'] }}" onclick="playAudio(this.name)">
+										<i class='bx bxs-volume-full'></i> Play Audio
+									</a>
+									{% else %}
+									<span style="color: var(--text-muted);">No Evidence</span>
+									{% endif %}
+								</td>
+							</tr>
+							{% endfor %}
+							{% else %}
+							<tr>
+								<td colspan="4" style="text-align: center; padding: 40px;">
+									<i class='bx bxs-check-shield'
+										style="font-size: 48px; color: var(--success, #4ade80); margin-bottom: 10px;"></i>
+									<p style="color: var(--text-muted);">Clean Record. No violations detected.</p>
+								</td>
+							</tr>
+							{% endif %}
+
+						</tbody>
+						</tbody>
+					</table>
+
+					<!-- Suspicion Graph Section -->
+					{% if resultDetials['Result'][0]['SuspicionLog'] %}
+					<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Suspicious Behavior Analysis</h3>
+					<div class="glass-panel" style="padding: 20px;">
+						<canvas id="suspicionChart" style="width:100%; height:300px;"></canvas>
+					</div>
+					{% endif %}
+
+					<!-- Chat History Section -->
+					{% if resultDetials['Result'][0]['ChatHistory'] %}
+					<h3 style="margin: 40px 0 20px 0; color: var(--text-main);">Chat History</h3>
+					<div class="glass-panel" style="padding: 20px; max-height: 400px; overflow-y: auto;">
+						{% for chat in resultDetials['Result'][0]['ChatHistory'] %}
+						<div
+							style="margin-bottom: 10px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if chat.sender == 'User' else 'flex-start' }};">
+							<div style="max-width: 70%; padding: 10px 15px; border-radius: 12px; font-size: 0.9rem; 
+                                        background: {{ 'var(--primary)' if chat.sender == 'User' else 'rgba(255,255,255,0.1)' }}; 
+                                        color: {{ '#fff' if chat.sender == 'User' else 'var(--text-main)' }};
+                                        border-bottom-{{ 'right' if chat.sender == 'User' else 'left' }}-radius: 2px;">
+								{{ chat.message }}
+							</div>
+							<span style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+								{{ chat.sender }} • {{ chat.time }}
+							</span>
+						</div>
+						{% endfor %}
+					</div>
+					{% endif %}
+				</div>
+			</div>
+		</main>
+		<!-- MAIN -->
+	</section>
+	<!-- CONTENT -->
+
+	<!-- AUDIO MODAL -->
+	<div id="audioModal" class="modal">
+		<div class="modal-content">
+			<span class="close" onclick="closeAudioModal()">&times;</span>
+			<div id="audioContainer"></div>
+		</div>
+	</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script>
+		// Close the modal when clicking outside or on the "Ok, Close" button
+		overlay.addEventListener("click", () => {
+			section.classList.remove("active");
+			audio.pause();
+		});
+		closeBtn.addEventListener("click", () => {
+			section.classList.remove("active");
+			audio.pause();
+		});
+		};
+	</script>
+</body>
+
+</html>

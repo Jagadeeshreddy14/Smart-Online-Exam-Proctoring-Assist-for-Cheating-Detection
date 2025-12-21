@@ -1,0 +1,35 @@
+remote: error: GH013: Repository rule violations found for refs/heads/main.        
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö        
+remote:     Resolve the following violations before pushing again        
+remote: 
+remote:     - Push cannot contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a blocked push        
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push        
+remote:             
+remote:             
+remote:       ΓÇöΓÇö Google OAuth Client ID ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö        
+remote:        locations:        
+remote:          - commit: 053ffa429499d419d9a35d3211b440bed8d52d45        
+remote:            path: app.py:51        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/Jagadeeshreddy14/Smart-Online-Exam-Proctoring-Assist-for-Cheating-Detection/security/secret-scanning/unblock-secret/378hHiRdVjU6rmYt8JxTvQ4l3YX        
+remote:             
+remote:             
+remote:       ΓÇöΓÇö Google OAuth Client Secret ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö        
+remote:        locations:        
+remote:          - commit: 053ffa429499d419d9a35d3211b440bed8d52d45        
+remote:            path: app.py:52        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/Jagadeeshreddy14/Smart-Online-Exam-Proctoring-Assist-for-Cheating-Detection/security/secret-scanning/unblock-secret/378hHh4ukhwE00esTSKt3ldVS2M        
+remote:             
+remote: 
+remote: 
+To https://github.com/Jagadeeshreddy14/Smart-Online-Exam-Proctoring-Assist-for-Cheating-Detection.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/Jagadeeshreddy14/Smart-Online-Exam-Proctoring-Assist-for-Cheating-Detection.git'

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>Online Exam Setup</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+    <link rel="stylesheet" href="{{url_for('static', filename='css/quiz.css')}}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Background Orbs -->
+    <div
+        style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; overflow:hidden; pointer-events:none;">
+        <div class="bg-orb orb-1" style="top: 10%; left: 20%; opacity:0.3;"></div>
+        <div class="bg-orb orb-2" style="bottom: 10%; right: 20%; opacity:0.3;"></div>
+    </div>
+
+    <header>
+        <nav class="navbar navbar-expand-md container">
+            <span class="text">The Online Exam Proctor</span>
+            <span class="ml-auto" id="timer">00:00</span>
+        </nav>
+    </header>
+
+    <!-- Chat Widget -->
+    <button class="chat-btn">
+        <i class="fas fa-comment-alt"></i> 💬
+    </button>
+
+    <div class="chat-widget">
+        <div class="chat-header">
+            <h3>Exam Helper AI</h3>
+            <button class="close-chat">&times;</button>
+        </div>
+        <div class="chat-body">
+            <div class="message bot">
+                Hello! I am your AI assistant for this exam. I can help clarify questions or rules. How can I help you?
+            </div>
+        </div>
+        <div class="chat-footer">
+            <input type="text" id="chatInput" placeholder="Type your doubt...">
+            <button id="micBtn"><i class="fas fa-microphone"></i></button>
+            <button id="sendBtn">➤</button>
+        </div>
+    </div>
+
+    <main class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="card-title text-center mb-4" id="title">
+                            <span class="text-gradient">Exam Session</span>
+                        </h2>
+                        <hr class="line mb-4">
+                        <div id="mainContent" class="text-center">
+                            <h5>
+                                Answer the following questions within the time limit. <br>
+                                <span style="color: var(--accent); font-size: 0.9em;">Warning: Incorrect answers may
+                                    penalize your score.</span>
+                            </h5>
+                            <button type="submit" id="startQuiz" class="rounded-pill mt-4">
+                                Start Exam
+                            </button>
+                        </div>
+                        <div id="quizContent"></div>
+                        <div id="completeTest"></div>
+                        <div id="answer" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2024 The Online Exam Proctor System</p>
+        </footer>
+    </main>
+
+    <script src="{{url_for('static', filename='js/questions.js')}}"></script>
+    <script src="{{url_for('static', filename='js/script.js')}}"></script>
+    <script src="{{url_for('static', filename='js/chat.js')}}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Boxicons -->
+    <link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+    <link rel="stylesheet" href="{{url_for('static', filename='css/admin.css')}}">
+
+    <title>Admin Profile</title>
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <section id="sidebar">
+        <a href="#" class="brand">
+            <i class='bx bxs-smile'></i>
+            <span class="text">Admin Dashboard</span>
+        </a>
+        <ul class="side-menu top">
+            <li>
+                <a href="{{url_for('adminStudents')}}">
+                    <i class='bx bxs-group'></i>
+                    <span class="text">Students</span>
+                </a>
+            </li>
+            <li>
+                <a href="{{url_for('adminResults')}}">
+                    <i class='bx bxs-graduation'></i>
+                    <span class="text">Exam Results</span>
+                </a>
+            </li>
+            <li>
+                <a href="{{url_for('logout')}}">
+                    <i class='bx bxs-log-out-circle'></i>
+                    <span class="text">Logout</span>
+                </a>
+            </li>
+        </ul>
+    </section>
+    <!-- SIDEBAR -->
+
+    <!-- CONTENT -->
+    <section id="content">
+        <!-- NAVBAR -->
+        <nav>
+            <i class='bx bx-menu'></i>
+            <span class="text">The Online Exam Proctor</span>
+            <div>
+                <a href="{{url_for('adminProfile')}}">
+                    <i class='bx bxs-user'></i>
+                    <span class="text">Profile</span>
+                </a>
+            </div>
+        </nav>
+        <!-- NAVBAR -->
+
+        <!-- MAIN -->
+        <main>
+            <div class="head-title">
+                <div class="left">
+                    <h1>My Profile</h1>
+                    <ul class="breadcrumb">
+                        <li>
+                            <a href="#">Dashboard</a>
+                        </li>
+                        <li><i class='bx bx-chevron-right'></i></li>
+                        <li>
+                            <a class="active" href="#">Profile</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="table-data">
+                <div class="order">
+                    <div class="head">
+                        <h3>Admin Information</h3>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: center; padding: 20px;">
+                        <div
+                            style="width: 100px; height: 100px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; font-size: 3rem; color: white;">
+                            <i class='bx bxs-user'></i>
+                        </div>
+
+                        <div style="width: 100%; max-width: 500px;">
+                            <div class="form-group">
+                                <label style="color: var(--text-muted);">Name</label>
+                                <div class="glass-panel" style="padding: 10px 15px; color: var(--text-main);">
+                                    {{ admin.Name if admin else 'Admin' }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label style="color: var(--text-muted);">Email</label>
+                                <div class="glass-panel" style="padding: 10px 15px; color: var(--text-main);">
+                                    {{ admin.Email if admin else 'admin@test.com' }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label style="color: var(--text-muted);">Role</label>
+                                <div class="glass-panel" style="padding: 10px 15px; color: var(--text-main);">
+                                    ADMIN
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+        <!-- MAIN -->
+    </section>
+    <!-- CONTENT -->
+
+    <script src="{{url_for('static', filename='js/TrStudent.js')}}"></script>
+</body>
+
+</html>

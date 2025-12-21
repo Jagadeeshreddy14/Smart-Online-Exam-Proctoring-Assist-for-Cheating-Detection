@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exam Rules | Online Proctor</title>
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
+  <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+  <!-- Inline styles for Rules specific layout -->
+  <style>
+    .rules-container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .rules-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .rules-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--primary);
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .rule-item {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      transition: 0.3s;
+    }
+
+    .rule-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateX(5px);
+    }
+
+    .rule-icon {
+      font-size: 1.5rem;
+      color: var(--accent);
+      margin-right: 1rem;
+      margin-top: 2px;
+    }
+
+    .rule-content h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.25rem;
+      color: var(--text-main);
+    }
+
+    .rule-content p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .action-area {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--glass-border);
+    }
+
+    .btn-start {
+      display: inline-flex;
+      align-items: center;
+      padding: 16px 48px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      font-size: 1.2rem;
+      font-weight: 700;
+      border-radius: 50px;
+      text-decoration: none;
+      transition: 0.3s;
+      box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+    }
+
+    .btn-start:hover {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
+      color: white;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Background Orbs -->
+  <div
+    style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; overflow:hidden; pointer-events:none;">
+    <div class="bg-orb orb-1" style="top: -50px; left: -50px;"></div>
+    <div class="bg-orb orb-2" style="bottom: 10%; right: 10%;"></div>
+  </div>
+
+  <div class="rules-container">
+    <div class="rules-header">
+      <h1>Exam Rules & Regulations</h1>
+      <p style="color: var(--text-muted);">Please read carefully before proceeding</p>
+    </div>
+
+    <div class="rule-item">
+      <i class='bx bxs-camera rule-icon'></i>
+      <div class="rule-content">
+        <h3>Webcam Required</h3>
+        <p>Your webcam must be active throughout the exam. Ensure your face is clearly visible at all times.</p>
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <i class='bx bxs-volume-mute rule-icon' style="color: var(--secondary);"></i>
+      <div class="rule-content">
+        <h3>No Audio Violations</h3>
+        <p>Ensure you are in a quiet environment. Background noise or talking may be flagged as suspicious.</p>
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <i class='bx bxs-window-alt rule-icon' style="color: #f59e0b;"></i>
+      <div class="rule-content">
+        <h3>Full Screen Mode</h3>
+        <p>Do not switch tabs or minimize the browser window. Doing so will result in an immediate flag.</p>
+      </div>
+    </div>
+
+    <div class="rule-item">
+      <i class='bx bxs-no-entry rule-icon' style="color: #ef4444;"></i>
+      <div class="rule-content">
+        <h3>Prohibited Materials</h3>
+        <p>Use of mobile phones, books, or external notes is strictly forbidden.</p>
+      </div>
+    </div>
+
+    <div class="action-area">
+      <a href="{{ url_for('faceInput') }}" class="btn-start">
+        Agree & Continue <i class='bx bx-right-arrow-alt' style="margin-left: 8px;"></i>
+      </a>
+    </div>
+  </div>
+
+</body>
+
+</html>
