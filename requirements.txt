@@ -1,5 +1,5 @@
 # Core Computer Vision
-opencv-python>=4.5.0
+opencv-python-headless>=4.5.0
 facenet-pytorch>=2.5.0
 dlib-bin>=19.24.1
 face-recognition>=1.3.0
@@ -11,12 +11,12 @@ torch>=1.7.0
 torchvision>=0.8.0
 torchaudio>=2.1.0
 
-# Audio Processing
-pyaudio>=0.2.13
-webrtcvad>=2.0.10
-openai-whisper>=20231106
+# Audio Processing (Headless servers might fail here, handled defensively in code)
+# pyaudio>=0.2.13
+# webrtcvad>=2.0.10
+# openai-whisper>=20231106
 
-# Screen Capture
+# Screen Capture & GUI (Removed for cloud deployment compatibility)
 mss>=6.1.0
 
 # Alert System
@@ -37,15 +37,11 @@ numpy>=1.20.0
 flask>=2.0.0
 python-dotenv
 
-keyboard>=0.13.5
-pyautogui>=0.9.53
-PyGetWindow>=0.0.9
-pyperclip>=1.8.2
-
-# Platform-Specific Dependencies
-pywin32>=300; sys_platform == 'win32'
-dbus-python>=1.3.2; sys_platform == 'linux'
-pygobject>=3.42.2; sys_platform == 'linux'
+# Platform-Specific Dependencies (Handled defensively in utils.py)
+# keyboard>=0.13.5
+# pyautogui>=0.9.53
+# PyGetWindow>=0.0.9
+# pyperclip>=1.8.2
 
 # Database
 Flask-PyMongo>=2.3.0

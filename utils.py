@@ -10,19 +10,46 @@ import random
 import os
 import json
 import shutil
-import keyboard
-import pyautogui
-import pygetwindow as gw
-import webbrowser
-import pyperclip
-from ultralytics import YOLO
 import threading
 from multiprocessing import Process
-import pyaudio
-import struct
-import wave
 import datetime
 import subprocess
+
+# Defensive imports for GUI/Audio (may be missing in cloud environments)
+try:
+    import keyboard
+except ImportError:
+    keyboard = None
+    print("Warning: keyboard module not found. Desktop hooks disabled.")
+
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
+    print("Warning: pyautogui module not found. Desktop automation disabled.")
+
+try:
+    import pygetwindow as gw
+except ImportError:
+    gw = None
+    print("Warning: pygetwindow module not found. Window tracking disabled.")
+
+try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
+    print("Warning: pyperclip module not found.")
+
+try:
+    import pyaudio
+except ImportError:
+    pyaudio = None
+    print("Warning: pyaudio module not found. Audio recording disabled.")
+
+import webbrowser
+from ultralytics import YOLO
+import struct
+import wave
 
 #Variables
 #All Related
@@ -458,10 +485,17 @@ def SD_record_duration(text, img):
 
 # Function to capture the screen using PyAutoGUI and return the frame as a NumPy array
 def capture_screen():
-    screenshot = pyautogui.screenshot()
-    frame = np.array(screenshot)
-    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    return frame
+    if pyautogui is None:
+        # Return a blank frame if pyautogui is not available
+        return np.zeros((1080, 1920, 3), dtype=np.uint8)
+    try:
+        screenshot = pyautogui.screenshot()
+        frame = np.array(screenshot)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        return frame
+    except Exception as e:
+        print(f"Error capturing screen: {e}")
+        return np.zeros((1080, 1920, 3), dtype=np.uint8)
 
 #Recording Function for Electronic Devices Detection
 def EDD_record_duration(text, img):
@@ -771,6 +805,8 @@ def MTOP_Detection(img):
 
 #Fourth : Screen Detection Function ( Key-words and Screens)
 def shortcut_handler(event):
+    if keyboard is None:
+        return
     if event.event_type == keyboard.KEY_DOWN:
         shortcut = ''
         # Check for Ctrl+C
@@ -849,6 +885,8 @@ def shortcut_handler(event):
 
 def screenDetection():
     global active_window, active_window_title, exam_window_title
+    if gw is None:
+        return
     textScreen = ""
     # Get the current active window
     new_active_window = gw.getActiveWindow()
@@ -909,13 +947,22 @@ class Recorder:
         return rms * 1000
 
     def __init__(self):
-        self.p = pyaudio.PyAudio()
-        self.stream = self.p.open(format=FORMAT,
-                                  channels=CHANNELS,
-                                  rate=RATE,
-                                  input=True,
-                                  output=True,
-                                  frames_per_buffer=CHUNK)
+        if pyaudio is None:
+            self.p = None
+            self.stream = None
+            return
+        try:
+            self.p = pyaudio.PyAudio()
+            self.stream = self.p.open(format=FORMAT,
+                                      channels=CHANNELS,
+                                      rate=RATE,
+                                      input=True,
+                                      output=True,
+                                      frames_per_buffer=CHUNK)
+        except Exception as e:
+            print(f"Error initializing audio: {e}")
+            self.p = None
+            self.stream = None
         self.time = time.time()
         self.quiet = []
         self.quiet_idx = -1
@@ -929,6 +976,9 @@ class Recorder:
         start = time.time()
         begin_time = None
         while Globalflag and not stop_proctoring_flag:
+            if self.stream is None:
+                time.sleep(1)
+                continue
             data = self.stream.read(CHUNK)
             rms_val = self.rms(data)
             if self.inSound(data):
