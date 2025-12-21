@@ -89,6 +89,7 @@
 								<th>Date</th>
 								<th>Status</th>
 								<th>Total Mark</th>
+								<th>Location</th>
 								<th>Actions</th>
 							</tr>
 						</thead>
@@ -116,6 +117,10 @@
 									</span>
 								</td>
 								<td>{{ result['TotalMark'] }}% </td>
+								<td style="font-size: 13px; color: var(--text-muted);">
+									<i class='bx bxs-map-pin' style="font-size: 14px; color: var(--accent);"></i>
+									{{ result['Location'] if result['Location'] else 'N/A' }}
+								</td>
 								<td>
 									<a href="{{ url_for('adminResultDetails', id=result['Id']) }}" class="btn-download"
 										style="text-decoration: none; width: fit-content; height: 32px; font-size: 12px;">

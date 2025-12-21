@@ -747,7 +747,15 @@ def adminResults():
         flash('Please login as an admin first.', 'error')
         return redirect(url_for('main'))
     
-    results = utils.getResults()
+    # Fetch results from MongoDB, fallback to JSON if empty
+    try:
+        results = list(mongo.db.results.find().sort("Id", -1))
+        if not results:
+            results = utils.getResults()
+    except Exception as e:
+        print(f"Error fetching results from MongoDB: {e}")
+        results = utils.getResults()
+        
     return render_template('Results.html', results=results)
 
 @app.route('/adminResultDetails/<int:id>')
@@ -757,7 +765,17 @@ def adminResultDetails(id):
         flash('Please login as an admin first.', 'error')
         return redirect(url_for('main'))
     
-    resultDetials = utils.getResultDetails(id)
+    # Fetch result details from MongoDB, fallback to JSON
+    try:
+        mongo_result = mongo.db.results.find_one({"Id": id})
+        resultDetials = utils.getResultDetails(id)
+        if mongo_result:
+            # Prefer MongoDB metadata (includes Location, SessionId)
+            resultDetials['Result'] = [mongo_result]
+    except Exception as e:
+        print(f"Error fetching result details from MongoDB: {e}")
+        resultDetials = utils.getResultDetails(id)
+        
     return render_template('ResultDetails.html', resultDetials=resultDetials)
 
 @app.route('/enable_retest/<int:id>')
