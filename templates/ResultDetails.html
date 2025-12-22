@@ -336,7 +336,7 @@
 		const audioContainer = document.getElementById("audioContainer");
 
 		function playAudio(audioFile) {
-			const audioPath = "{{ url_for('static', filename='OutputVideos/') }}" + audioFile;
+			const audioPath = "{{ url_for('static', filename='OutputAudios/') }}" + audioFile;
 			audioContainer.innerHTML = `<audio controls autoplay style="width: 100%;"><source src="${audioPath}" type="audio/wav"></audio>`;
 			audioModal.style.display = "block";
 		}

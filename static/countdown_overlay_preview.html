@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proctoring System - Countdown Overlay Preview</title>
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Main Exam Screen Background */
+        .exam-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            opacity: 0.3;
+            z-index: 1;
+        }
+
+        .exam-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            opacity: 0.4;
+        }
+
+        .exam-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        .exam-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .exam-timer {
+            font-size: 20px;
+            font-weight: 600;
+            color: #06b6d4;
+        }
+
+        .question-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            flex: 1;
+        }
+
+        .question-text {
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .option {
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .option:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Red Warning Overlay */
+        .warning-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(20px);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .warning-container {
+            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+            padding: 60px 80px;
+            border-radius: 32px;
+            border: 2px solid rgba(239, 68, 68, 0.3);
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.8),
+                0 0 0 1px rgba(239, 68, 68, 0.2),
+                0 0 80px rgba(239, 68, 68, 0.15);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .warning-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #ef4444, #dc2626, #ef4444);
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% {
+                opacity: 1;
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+            }
+            50% {
+                opacity: 0.7;
+                box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
+            }
+        }
+
+        /* Camera Icon with Red X */
+        .camera-icon-container {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-icon-bg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 
+                0 0 40px rgba(239, 68, 68, 0.6),
+                0 0 80px rgba(239, 68, 68, 0.3);
+            animation: pulse-icon 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-icon {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .camera-icon {
+            font-size: 56px;
+            color: white;
+        }
+
+        .red-x {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 40px;
+            background: #dc2626;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #1a1a1a;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .red-x::before,
+        .red-x::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 3px;
+            background: white;
+            border-radius: 2px;
+        }
+
+        .red-x::before {
+            transform: rotate(45deg);
+        }
+
+        .red-x::after {
+            transform: rotate(-45deg);
+        }
+
+        /* Warning Text */
+        .warning-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ef4444;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
+        }
+
+        .warning-message {
+            font-size: 18px;
+            color: #fca5a5;
+            margin-bottom: 40px;
+            line-height: 1.5;
+        }
+
+        /* Large Countdown Timer */
+        .countdown-timer {
+            font-size: 96px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -4px;
+            color: #ef4444;
+            margin: 30px 0;
+            text-shadow: 
+                0 0 20px rgba(239, 68, 68, 0.5),
+                0 0 40px rgba(239, 68, 68, 0.3);
+            animation: timer-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes timer-pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.02);
+            }
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            margin: 30px 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+            border-radius: 6px;
+            width: 50%;
+            transition: width 1s linear;
+            position: relative;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
+                transparent
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        /* I'm Back Button */
+        .im-back-button {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+            margin-top: 20px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .im-back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(6, 182, 212, 0.5);
+            background: linear-gradient(135deg, #0891b2, #2563eb);
+        }
+
+        .im-back-button:active {
+            transform: translateY(0);
+        }
+
+        /* Urgency indicator */
+        .urgency-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Exam Screen Background -->
+    <div class="exam-background"></div>
+    
+    <div class="exam-content">
+        <div class="exam-header">
+            <div class="exam-title">Online Exam Proctor</div>
+            <div class="exam-timer">Time: 15:32</div>
+        </div>
+        
+        <div class="question-container">
+            <div class="question-text">
+                <strong>Question 5:</strong> What is the primary purpose of object-oriented programming?
+            </div>
+            
+            <div class="options">
+                <div class="option">A. To organize code into reusable components</div>
+                <div class="option">B. To make code run faster</div>
+                <div class="option">C. To reduce file sizes</div>
+                <div class="option">D. To simplify syntax</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Red Warning Overlay -->
+    <div class="warning-overlay">
+        <div class="urgency-indicator"></div>
+        
+        <div class="warning-container">
+            <!-- Camera Icon with Red X -->
+            <div class="camera-icon-container">
+                <div class="camera-icon-bg">
+                    <i class='bx bxs-camera camera-icon'></i>
+                </div>
+                <div class="red-x"></div>
+            </div>
+
+            <!-- Warning Text -->
+            <h1 class="warning-title">⚠️ WARNING</h1>
+            <p class="warning-message">No face detected in camera.<br>Return immediately.</p>
+
+            <!-- Large Countdown Timer -->
+            <div class="countdown-timer">00:15</div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-bar" style="width: 50%;"></div>
+            </div>
+
+            <!-- I'm Back Button -->
+            <button class="im-back-button" onclick="alert('Timer reset! Please ensure your face is visible.')">
+                I'm Back
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Animate countdown
+        let seconds = 15;
+        const timerElement = document.querySelector('.countdown-timer');
+        const progressBar = document.querySelector('.progress-bar');
+        
+        const countdown = setInterval(() => {
+            seconds--;
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            timerElement.textContent = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            
+            // Update progress bar
+            const percent = (seconds / 15) * 100;
+            progressBar.style.width = percent + '%';
+            
+            if (seconds <= 0) {
+                clearInterval(countdown);
+                timerElement.textContent = '00:00';
+                progressBar.style.width = '0%';
+                alert('Exam terminated due to absence!');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
+

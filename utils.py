@@ -155,14 +155,10 @@ def log_suspicion():
 log_thread = threading.Thread(target=log_suspicion, daemon=True)
 log_thread.start()
 
-capb= cv2.VideoCapture(0)
-width= int(capb.get(cv2.CAP_PROP_FRAME_WIDTH))
-height= int(capb.get(cv2.CAP_PROP_FRAME_HEIGHT))
-capb.release()
-capa = cv2.VideoCapture("test_V.mp4")
-EDWidth=int(capa.get(cv2.CAP_PROP_FRAME_WIDTH))
-EDHeight=int(capa.get(cv2.CAP_PROP_FRAME_HEIGHT))
-capa.release()
+# Default dimensions for writers (will be updated when camera opens)
+width, height = 640, 480
+EDWidth, EDHeight = 640, 480
+
 video = [(str(random.randint(1,50000))+".mp4"), (str(random.randint(1,50000))+".mp4"), (str(random.randint(1,50000))+".mp4"), (str(random.randint(1,50000))+".mp4"), (str(random.randint(1,50000))+".mp4")]
 writer = [cv2.VideoWriter(video[0], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height)), cv2.VideoWriter(video[1], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height)), cv2.VideoWriter(video[2], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height)), cv2.VideoWriter(video[3], cv2.VideoWriter_fourcc(*'mp4v'), 15, (1920, 1080)), cv2.VideoWriter(video[4], cv2.VideoWriter_fourcc(*'mp4v'), 20 , (EDWidth,EDHeight))]
 #More than One Person Related
@@ -221,6 +217,36 @@ if not os.path.exists(f_name_directory):
     os.makedirs(f_name_directory)
 # Capture
 cap = None
+global_frame = None
+frame_lock = threading.Lock()
+
+def master_frame_reader():
+    """Centralized thread to read frames from camera and share with other threads."""
+    global global_frame, cap, Globalflag, stop_proctoring_flag
+    print("Master Frame Reader thread started")
+    while not stop_proctoring_flag:
+        if cap is not None and cap.isOpened():
+            try:
+                success, frame = cap.read()
+                if success:
+                    with frame_lock:
+                        global_frame = frame.copy() if frame is not None else None
+                else:
+                    print("Master Frame Reader: Failed to read frame from camera")
+                    time.sleep(0.01)
+            except Exception as e:
+                print(f"Error in master_frame_reader: {e}")
+                time.sleep(0.01)
+        else:
+            # Idle for a bit if camera not active
+            time.sleep(0.1)
+    print("Master Frame Reader thread stopped")
+
+def get_frame():
+    """Retrieve the latest frame from the shared buffer."""
+    global global_frame
+    with frame_lock:
+        return global_frame.copy() if global_frame is not None else None
 
 
 #Database and Files Related
@@ -312,12 +338,12 @@ def faceDetectionRecording(img, text):
         start_time[0] = time.time()
         for _ in range(2):
             writer[0].write(img)
-    elif text != 'Verified Student appeared' and str(text) == prev_state[0] and (time.time() - start_time[0]) > 3:
+    elif text != 'Verified Student appeared' and str(text) == prev_state[0] and (time.time() - start_time[0]) > 30:
         flag[0] = True
         for _ in range(2):
             writer[0].write(img)
         
-        # Immediate Termination on confirmed violation
+        # Immediate Termination on confirmed violation (30s)
         if not stop_proctoring_flag: # Ensure we haven't already terminated
             writer[0].release()
             end_time[0] = time.time()
@@ -349,7 +375,7 @@ def faceDetectionRecording(img, text):
             writer[0] = cv2.VideoWriter(video[0], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
             flag[0] = False
 
-    elif text != 'Verified Student appeared' and str(text) == prev_state[0] and (time.time() - start_time[0]) <= 3:
+    elif text != 'Verified Student appeared' and str(text) == prev_state[0] and (time.time() - start_time[0]) <= 30:
         flag[0] = False
         for _ in range(2):
             writer[0].write(img)
@@ -746,7 +772,11 @@ class FaceRecognition:
             sys.exit('Video source not found...')
 
         while Globalflag and not stop_proctoring_flag:
-            ret, frame = cap.read()
+            frame = get_frame()
+            if frame is None:
+                time.sleep(0.05)
+                continue
+            
             text = "Verified Student disappeared"
             print("Running Face Verification Function")
             # Only process every other frame of video to save time
@@ -1238,7 +1268,11 @@ def cheat_Detection1():
         face_mesh = None
     print(f'CD1 Flag is {Globalflag}')
     while Globalflag:
-        success, image = cap.read()
+        image = get_frame()
+        if image is None:
+            time.sleep(0.05)
+            continue
+        
         if face_mesh is not None:
             headMovmentDetection(image, face_mesh)
         else:
@@ -1260,24 +1294,15 @@ def cheat_Detection2():
     no_person_status['detected'] = True
     no_person_status['start_time'] = None
     
-    # Timing Constants for Face Presence
-    # 0-10s: Grace Period
-    # 10-30s: Initial Alert (Toast)
-    # 30-60s: Countdown Overlay (30s)
-    ALERT_THRESHOLD = 10
-    COUNTDOWN_START_THRESHOLD = 30
-    TOTAL_TIMEOUT = 60 
+    # Timing Constants for Face Presence (Synced with app.py)
+    ALERT_THRESHOLD = 0
+    COUNTDOWN_START_THRESHOLD = 0
+    TOTAL_TIMEOUT = 30 
     
     while Globalflag:
-        # Check if cap is valid before reading
-        if cap is None or not cap.isOpened():
-            print("Camera is not open, cheat detection 2 stopping/pausing...")
-            time.sleep(1)
-            continue
-
-        success, image = cap.read()
-        if not success:
-            print("WARNING: Failed to read frame from camera!")
+        image = get_frame()
+        if image is None:
+            time.sleep(0.05)
             continue
         
         # Skip frames for faster processing
@@ -1341,8 +1366,13 @@ def cheat_Detection2():
 def check_person_present(image):
     """Quick check if a person/face is present in the frame."""
     try:
-        # Use OpenCV's fast face detector
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        # Use local Haar Cascade file which is known to exist
+        cascade_path = 'Haarcascades/haarcascade_frontalface_default.xml'
+        if not os.path.exists(cascade_path):
+             # Fallback to cv2 data if local not found (though mapped file suggests it is there)
+             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+             
+        face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
         return len(faces) > 0
@@ -1392,6 +1422,10 @@ def getResultDetails(rid):
             "Violation": filtered_violations
         }
     return resultDetails
+
+# Start the master frame reader automatically in a background thread
+master_reader_thread = threading.Thread(target=master_frame_reader, daemon=True)
+master_reader_thread.start()
 
 a = Recorder()
 fr = FaceRecognition()

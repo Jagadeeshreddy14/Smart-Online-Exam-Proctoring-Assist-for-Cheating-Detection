@@ -185,25 +185,249 @@ function startQuiz() {
 
     // Start polling for no-person warnings
     startPersonDetectionPolling();
+
+    // Start Background Noise Detection
+    startNoiseDetection();
+}
+
+// Background Noise Detection
+let noiseAudioContext;
+let noiseAnalyser;
+let noiseMicrophone;
+let noiseScriptNode;
+let noiseStream;
+let noiseRecorder; // MediaRecorder instance
+let noiseChunks = [];
+let isNoiseRecording = false;
+
+let noiseViolationCount = 0;
+let consecutiveNoiseFrames = 0;
+const NOISE_THRESHOLD = 35; // Sensitivity threshold
+const NOISE_DURATION_FRAMES = 50; // Approx 2-3 seconds
+
+async function startNoiseDetection() {
+    try {
+        noiseStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Setup Analysis
+        noiseAudioContext = new AudioContext();
+        noiseAnalyser = noiseAudioContext.createAnalyser();
+        noiseMicrophone = noiseAudioContext.createMediaStreamSource(noiseStream);
+        noiseScriptNode = noiseAudioContext.createScriptProcessor(2048, 1, 1);
+
+        noiseAnalyser.smoothingTimeConstant = 0.8;
+        noiseAnalyser.fftSize = 1024;
+
+        noiseMicrophone.connect(noiseAnalyser);
+        noiseAnalyser.connect(noiseScriptNode);
+        noiseScriptNode.connect(noiseAudioContext.destination);
+
+        // Setup Recording (but don't start yet)
+        noiseRecorder = new MediaRecorder(noiseStream);
+
+        noiseRecorder.ondataavailable = function (e) {
+            if (e.data.size > 0) noiseChunks.push(e.data);
+        };
+
+        noiseRecorder.onstop = function () {
+            // Upload evidence if we have chunks
+            if (noiseChunks.length > 0) {
+                const blob = new Blob(noiseChunks, { type: 'audio/webm' });
+                uploadNoiseEvidence(blob);
+                noiseChunks = [];
+            }
+        };
+
+        noiseScriptNode.onaudioprocess = function () {
+            if (secondsLeft <= 0) {
+                stopNoiseDetection();
+                return;
+            }
+
+            var array = new Uint8Array(noiseAnalyser.frequencyBinCount);
+            noiseAnalyser.getByteFrequencyData(array);
+
+            // Calculate average volume
+            let values = 0;
+            for (let i = 0; i < array.length; i++) values += array[i];
+            let average = values / array.length;
+
+            if (average > NOISE_THRESHOLD) {
+                consecutiveNoiseFrames++;
+
+                // If noise starts, start recording evidence
+                if (!isNoiseRecording && consecutiveNoiseFrames > 10) {
+                    startEvidenceRecording();
+                }
+
+                if (consecutiveNoiseFrames > NOISE_DURATION_FRAMES) {
+                    handleNoiseViolation();
+                    consecutiveNoiseFrames = 0;
+                }
+            } else {
+                consecutiveNoiseFrames = Math.max(0, consecutiveNoiseFrames - 1);
+
+                // If noise stops for a while, stop recording
+                if (isNoiseRecording && consecutiveNoiseFrames === 0) {
+                    stopEvidenceRecording();
+                }
+            }
+        }
+        console.log("Background noise detection started");
+
+    } catch (err) {
+        console.error("Noise detection failed:", err);
+        showToast('⚠️ Audio monitoring failed.', 'warning');
+    }
+}
+
+function startEvidenceRecording() {
+    if (noiseRecorder && noiseRecorder.state === 'inactive') {
+        isNoiseRecording = true;
+        noiseChunks = [];
+        noiseRecorder.start();
+        console.log("Started recording noise evidence...");
+    }
+}
+
+function stopEvidenceRecording() {
+    if (noiseRecorder && noiseRecorder.state === 'recording') {
+        isNoiseRecording = false;
+        noiseRecorder.stop();
+        console.log("Stopped recording noise evidence.");
+    }
+}
+
+function uploadNoiseEvidence(blob) {
+    const now = Date.now();
+    if (now - lastNoiseViolationTime > 15000) {
+        console.log("Discarding audio clip (no violation triggered)");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('audio_evidence', blob, 'noise_evidence.webm');
+    formData.append('sessionId', examSessionId);
+
+    $.ajax({
+        type: 'POST',
+        url: '/upload_audio_violation',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (response) {
+            console.log("Noise evidence uploaded:", response);
+        },
+        error: function (err) {
+            console.error("Failed to upload noise evidence:", err);
+        }
+    });
+}
+
+function stopNoiseDetection() {
+    if (noiseScriptNode) noiseScriptNode.disconnect();
+    if (noiseAnalyser) noiseAnalyser.disconnect();
+    if (noiseMicrophone) noiseMicrophone.disconnect();
+    if (noiseStream) noiseStream.getTracks().forEach(track => track.stop());
+}
+
+let lastNoiseViolationTime = 0;
+
+function handleNoiseViolation() {
+    const now = Date.now();
+    if (now - lastNoiseViolationTime < 10000) return;
+
+    lastNoiseViolationTime = now;
+    noiseViolationCount++;
+
+    console.warn("High background noise detected!");
+    showToast('⚠️ High background noise detected! maintain silence.', 'warning');
+
+    // Force current recording fragment to upload
+    if (isNoiseRecording) {
+        stopEvidenceRecording();
+        setTimeout(() => {
+            if (secondsLeft > 0) startEvidenceRecording();
+        }, 1000);
+    } else {
+        // If not already recording, start and stop after a few seconds to get a clip
+        startEvidenceRecording();
+        setTimeout(stopEvidenceRecording, 5000);
+    }
+
+    reportViolation("Background Noise", "Sustained high volume detected via microphone");
 }
 
 // Poll for camera absence
 let personPollingInterval = null;
-const absenceOverlay = document.getElementById('cameraAbsenceOverlay');
-const absenceTimer = document.getElementById('absenceTimer');
-const absenceProgressBar = document.getElementById('absenceProgressBar');
-const absenceIconContainer = document.getElementById('absenceIconContainer');
-const absenceTitle = document.getElementById('absenceTitle');
-const absenceMessage = document.getElementById('absenceMessage');
+let absenceOverlay, absenceTimer, absenceProgressBar, absenceIconContainer, absenceTitle, absenceMessage;
+let lastAudioPlayTime = 0;
+
+function playWarningAudio() {
+    try {
+        const now = Date.now();
+        if (now - lastAudioPlayTime < 1000) return; // Limit to once per second
+        lastAudioPlayTime = now;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+        console.warn("Audio play failed:", e);
+    }
+}
+
+// Initialize elements when DOM is ready
+function initializeAbsenceElements() {
+    absenceOverlay = document.getElementById('cameraAbsenceOverlay');
+    absenceTimer = document.getElementById('absenceTimer');
+    absenceProgressBar = document.getElementById('absenceProgressBar');
+    absenceIconContainer = document.getElementById('absenceIconContainer');
+    absenceTitle = document.getElementById('absenceTitle');
+    absenceMessage = document.getElementById('absenceMessage');
+}
+
+// Initialize elements immediately (script loads at end of body, so DOM should be ready)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeAbsenceElements);
+} else {
+    initializeAbsenceElements();
+}
 
 function startPersonDetectionPolling() {
-    if (personPollingInterval) return;
+    if (personPollingInterval) {
+        console.log("Person detection polling already started");
+        return;
+    }
+
+    // Ensure elements are initialized
+    if (!absenceOverlay) {
+        initializeAbsenceElements();
+    }
+
+    console.log("Starting person detection polling...", {
+        overlay: !!absenceOverlay,
+        timer: !!absenceTimer,
+        progressBar: !!absenceProgressBar
+    });
 
     personPollingInterval = setInterval(() => {
         $.ajax({
             type: "GET",
             url: "/api/check_person_status",
             success: function (response) {
+                console.log("Person status check:", response.status, response);
                 // 1. Alert Phase (Toast Only)
                 if (response.status === 'alert_phase') {
                     if (absenceOverlay) absenceOverlay.style.display = 'none';
@@ -211,6 +435,9 @@ function startPersonDetectionPolling() {
                 }
                 // 2. Countdown Phase (Overlay)
                 else if (response.status === 'countdown_phase') {
+                    // Play warning sound
+                    playWarningAudio();
+
                     // Hide toast, show overlay
                     removePersistentToast('person-warning');
                     if (absenceOverlay) {
@@ -263,11 +490,30 @@ function startPersonDetectionPolling() {
                     removePersistentToast('person-warning');
                 }
             },
-            error: function () {
-                console.error("Failed to check person status");
+            error: function (xhr, status, error) {
+                console.error("Failed to check person status:", error);
             }
         });
     }, 1000);
+}
+
+function checkUserPresence() {
+    console.log("User clicked 'I'm Back'. Resetting absence timer...");
+
+    // Immediate UI feedback
+    if (absenceOverlay) absenceOverlay.style.display = 'none';
+
+    $.ajax({
+        type: "POST",
+        url: "/api/reset_absence",
+        success: function (response) {
+            console.log("Absence timer reset successfully.");
+            // Further validation will happen in the next polling interval
+        },
+        error: function (xhr, status, error) {
+            console.error("Failed to reset absence timer via API:", error);
+        }
+    });
 }
 
 function stopPersonDetectionPolling() {
@@ -370,11 +616,24 @@ function reportViolation(type, details) {
 
 async function startScreenRecording() {
     try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
             video: { mediaSource: "screen" }
         });
 
-        mediaRecorder = new MediaRecorder(stream);
+        // Request microphone for background audio
+        let combinedStream = displayStream;
+        try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            combinedStream = new MediaStream([
+                ...displayStream.getVideoTracks(),
+                ...audioStream.getAudioTracks()
+            ]);
+            console.log("Background audio integrated with screen recording");
+        } catch (audioErr) {
+            console.warn("Could not access microphone for screen recording audio:", audioErr);
+        }
+
+        mediaRecorder = new MediaRecorder(combinedStream);
         recordedChunks = [];
 
         mediaRecorder.ondataavailable = function (e) {

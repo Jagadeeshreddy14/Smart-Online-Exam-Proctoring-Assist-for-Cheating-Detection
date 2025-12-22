@@ -93,19 +93,26 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 # Function to show face detection's Rectangle in Face Input Page
 def capture_by_frames():
-    """Video capture for face detection."""
-    global camera
-    # Initialize video capture if not already done
-    if not hasattr(utils, 'cap') or utils.cap is None:
+    """Video streaming route for face detection."""
+    # We rely on utils.cap being opened by the exam route or system check
+    # But as a fallback, we can try to open it if it's completely missing
+    if not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened():
+        print("Camera not open, attempting to open in capture_by_frames")
         utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     
     while True:
-        if not utils.cap or not utils.cap.isOpened():
-            break
+        if not hasattr(utils, 'cap') or not utils.cap or not utils.cap.isOpened():
+            print("Camera lost or not open in capture_by_frames")
+            time.sleep(1)
+            # Re-try open if lost
+            utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            if not utils.cap.isOpened():
+                break
             
-        success, frame = utils.cap.read()
-        if not success:
-            break
+        frame = utils.get_frame()
+        if frame is None:
+            time.sleep(0.05)
+            continue
             
         # Face detection
         detector = cv2.CascadeClassifier('Haarcascades/haarcascade_frontalface_default.xml')
@@ -123,6 +130,9 @@ def capture_by_frames():
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+        # Add a small delay to prevent CPU hogging and camera contention
+        time.sleep(0.03)
 
 # Function to run Cheat Detection when we start the Application
 def start_loop():
@@ -662,6 +672,39 @@ def upload_recording():
     
     return jsonify({"success": True, "filename": filename})
 
+@app.route('/upload_audio_violation', methods=['POST'])
+def upload_audio_violation():
+    """Handle audio evidence uploads for noise violations."""
+    if 'audio_evidence' not in request.files:
+        return jsonify({"error": "No audio file"}), 400
+    
+    file = request.files['audio_evidence']
+    sessionId = request.form.get('sessionId', str(int(time.time())))
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Ensure violations directory exists
+    violation_dir = os.path.join('static', 'Violations')
+    if not os.path.exists(violation_dir):
+        os.makedirs(violation_dir)
+
+    # Save file
+    timestamp = int(time.time())
+    filename = f"noise_violation_{sessionId}_{timestamp}.webm"
+    file.save(os.path.join(violation_dir, filename))
+    
+    # Log the violation here to ensure we have the link
+    # We can either update the last violation or creating a new one. 
+    # Since the frontend calls reportViolation separately, we might just want to return the filename
+    # and let the frontend/backend correlation handle it, OR we just log it here as a "Evidence"
+    
+    # Let's log it as a specific evidence entry or update the violation log?
+    # Simplest: Update the noise violation logic to include this file.
+    # For now, just save it and return success, assuming the admin can find it by timestamp/session
+    
+    return jsonify({"success": True, "filename": filename})
+
 @app.route('/api/violation', methods=['POST'])
 def report_violation():
     """Handle violations reported from frontend (e.g. Fullscreen Exit)."""
@@ -720,37 +763,39 @@ def check_person_status():
     if not status['detected'] and status['start_time'] is not None:
         elapsed = time.time() - status['start_time']
         
-        # New Phases Logic
-        # 0-10s: Grace
-        if elapsed < 10:
-            return jsonify({
-                "status": "grace_period", 
-                "elapsed": elapsed, 
-                "warning": False
-            })
-        # 10-30s: Initial Alert (Toast)
-        elif elapsed < 30:
-            return jsonify({
-                "status": "alert_phase",
-                "message": "⚠️ Please ensure your face is visible in the camera",
-                "elapsed": elapsed,
-                "warning": True
-            })
-        # 30-60s: Countdown Overlay
-        elif elapsed < 60:
-            remaining = 60 - elapsed
+        # Immediate Countdown Phase
+        if elapsed < 30:
+            remaining = 30 - elapsed
             return jsonify({
                 "status": "countdown_phase", 
                 "message": "Return to camera view within:",
                 "elapsed": elapsed,
                 "remaining": int(remaining),
-                "total_countdown": 30, # 60-30
+                "total_countdown": 30,
                 "warning": True
             })
         else:
+            # Countdown finished - terminate the exam
+            if not utils.exam_status.get('terminated', False):
+                # Capture evidence frame before termination
+                evidence_frame = None
+                if utils.cap is not None and utils.cap.isOpened():
+                    ret, frame = utils.cap.read()
+                    if ret:
+                        evidence_frame = frame
+                utils.terminate_exam("No participant detected in camera feed - Countdown expired", evidence_frame)
             return jsonify({"status": "terminated", "warning": True})
             
     return jsonify({"status": "ok", "warning": False})
+
+@app.route('/api/reset_absence', methods=['POST'])
+def reset_absence():
+    """Manually reset the absence timer (called by I'm Back button)."""
+    if hasattr(utils, 'no_person_status'):
+        utils.no_person_status['detected'] = True
+        utils.no_person_status['start_time'] = None
+        print("✅ Absence timer manually reset via API")
+    return jsonify({"success": True})
 
 @app.route('/showResultPass/<result_status>')
 def showResultPass(result_status):
