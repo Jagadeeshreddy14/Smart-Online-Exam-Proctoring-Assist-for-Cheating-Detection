@@ -61,6 +61,7 @@ shortcut_event_name = ""
 exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
 violation_counts = {} # Tracks counts of specific violations per session
 no_person_status = {'detected': True, 'start_time': None}
+extension_heartbeat_time = 0
 
 
 # Result ID Initialization
@@ -225,6 +226,27 @@ def master_frame_reader():
     global global_frame, cap, Globalflag, stop_proctoring_flag
     print("Master Frame Reader thread started")
     while not stop_proctoring_flag:
+        # Auto-initialize if missing
+        # CRITICAL: Check flag AGAIN before opening to prevent race condition where stop_proctoring closes it 
+        # and we immediately re-open it before exiting loop.
+        if stop_proctoring_flag: 
+            break
+
+        if cap is None or not cap.isOpened():
+            try:
+                print("Master Reader: Opening Camera...")
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                if not cap.isOpened():
+                    print("Master Reader: Failed to open camera, retrying...")
+                    time.sleep(1)
+                    continue
+                else:
+                    print("Master Reader: Camera opened successfully.")
+            except Exception as e:
+                print(f"Master Reader: Error opening camera: {e}")
+                time.sleep(1)
+                continue
+
         if cap is not None and cap.isOpened():
             try:
                 success, frame = cap.read()
@@ -650,11 +672,15 @@ def capture_screen():
 def EDD_record_duration(text, img):
     global start_time, end_time, prev_state, flag, writer,recorded_Images,EDD_Duration, video, EDWidth, EDHeight
     print(text)
-    if text == "Electronic Device Detected" and prev_state[4] == "No Electronic Device Detected":
+    # Generalized check: If text contains "Detected" (covers "Electronic Device Detected", "Book Detected")
+    is_violation = "Detected" in text and "No" not in text
+    was_safe = "No" in prev_state[4]
+    
+    if is_violation and was_safe:
         start_time[4] = time.time()
         for _ in range(2):
             writer[4].write(img)
-    elif text == "Electronic Device Detected" and str(text) == prev_state[4] and (time.time() - start_time[4]) > 0:
+    elif is_violation and str(text) == prev_state[4] and (time.time() - start_time[4]) > 0:
         flag[4] = True
         for _ in range(2):
             writer[4].write(img)
@@ -690,12 +716,13 @@ def EDD_record_duration(text, img):
             writer[4] = cv2.VideoWriter(video[4], cv2.VideoWriter_fourcc(*'mp4v'), 10 , (EDWidth,EDHeight))
             flag[4] = False
 
-    elif text == "Electronic Device Detected" and str(text) == prev_state[4] and (time.time() - start_time[4]) <= 0:
+    elif is_violation and str(text) == prev_state[4] and (time.time() - start_time[4]) <= 0:
         flag[4] = False
         for _ in range(2):
             writer[4].write(img)
     else:
-        if prev_state[4] == "Electronic Device Detected" and not stop_proctoring_flag:
+        # Violation ended
+        if "Detected" in prev_state[4] and "No" not in prev_state[4] and not stop_proctoring_flag:
             writer[4].release()
             end_time[4] = time.time()
             os.remove(video[4])
@@ -742,11 +769,25 @@ class FaceRecognition:
     def encode_faces(self):
         self.known_face_encodings = []
         self.known_face_names = []
+        if not os.path.exists('static/Profiles'):
+            print("Profiles directory not found, creating...")
+            os.makedirs('static/Profiles', exist_ok=True)
+            
         for image in os.listdir('static/Profiles'):
+            # Skip non-image files
+            if not image.lower().endswith(('.png', '.jpg', '.jpeg')):
+                continue
+                
             try:
+                print(f"Processing profile: {image}")
                 # Load image with face_recognition (loads as RGB)
                 face_image = face_recognition.load_image_file(f"static/Profiles/{image}")
                 
+                # Check for empty image
+                if face_image is None or face_image.size == 0:
+                    print(f"Skipping empty image: {image}")
+                    continue
+
                 # Verify image type and convert if necessary (ensure 8-bit RGB)
                 if face_image.dtype != np.uint8:
                      face_image = face_image.astype(np.uint8)
@@ -761,7 +802,8 @@ class FaceRecognition:
                     print(f"No face found in {image}")
             except Exception as e:
                 print(f"Error processing {image}: {e}")
-        print(self.known_face_names)
+                continue # Ensure we continue to next image!
+        print(f"Loaded {len(self.known_face_names)} profiles: {self.known_face_names}")
 
     def run_recognition(self):
         global Globalflag
@@ -857,66 +899,91 @@ def headMovmentDetection(image, face_mesh):
     face_3d = []
     face_2d = []
 
-    if results.multi_face_landmarks:
-        for face_landmarks in results.multi_face_landmarks:
-            for idx, lm in enumerate(face_landmarks.landmark):
-                if idx == 33 or idx == 263 or idx == 1 or idx == 61 or idx == 291 or idx == 199:
-                    if idx == 1:
-                        nose_2d = (lm.x * img_w, lm.y * img_h)
-                        nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 8000)
+    try:
+        if results.multi_face_landmarks:
+            for face_landmarks in results.multi_face_landmarks:
+                for idx, lm in enumerate(face_landmarks.landmark):
+                    if idx == 33 or idx == 263 or idx == 1 or idx == 61 or idx == 291 or idx == 199:
+                        if idx == 1:
+                            nose_2d = (lm.x * img_w, lm.y * img_h)
+                            nose_3d = (lm.x * img_w, lm.y * img_h, lm.z * 8000)
 
-                    x, y = int(lm.x * img_w), int(lm.y * img_h)
+                        x, y = int(lm.x * img_w), int(lm.y * img_h)
 
-                    # Get the 2D Coordinates
-                    face_2d.append([x, y])
+                        # Get the 2D Coordinates
+                        face_2d.append([x, y])
 
-                    # Get the 3D Coordinates
-                    face_3d.append([x, y, lm.z])
+                        # Get the 3D Coordinates
+                        face_3d.append([x, y, lm.z])
 
-                    # Convert it to the NumPy array
-            face_2d = np.array(face_2d, dtype=np.float64)
+                # Convert it to the NumPy array
+                face_2d = np.array(face_2d, dtype=np.float64)
 
-            # Convert it to the NumPy array
-            face_3d = np.array(face_3d, dtype=np.float64)
+                # Convert it to the NumPy array
+                face_3d = np.array(face_3d, dtype=np.float64)
+                
+                if len(face_2d) < 4: continue # PnP needs at least 4 points
 
-            # The camera matrix
-            focal_length = 1 * img_w
+                # The camera matrix
+                focal_length = 1 * img_w
 
-            cam_matrix = np.array([[focal_length, 0, img_h / 2],
-                                   [0, focal_length, img_w / 2],
-                                   [0, 0, 1]])
+                cam_matrix = np.array([[focal_length, 0, img_h / 2],
+                                       [0, focal_length, img_w / 2],
+                                       [0, 0, 1]])
 
-            # The Distance Matrix
-            dist_matrix = np.zeros((4, 1), dtype=np.float64)
+                # The Distance Matrix
+                dist_matrix = np.zeros((4, 1), dtype=np.float64)
 
-            # Solve PnP
-            success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
+                # Solve PnP
+                success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
+                
+                if not success: continue
 
-            # Get rotational matrix
-            rmat, jac = cv2.Rodrigues(rot_vec)
+                # Get rotational matrix
+                rmat, jac = cv2.Rodrigues(rot_vec)
 
-            # Get angles
-            angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
+                # Get angles
+                angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
 
-            # Get the y rotation degree
-            x = angles[0] * 360
-            y = angles[1] * 360
-            # print(y)
-            textHead = ''
-            # See where the user's head tilting
-            if y < -10:
-                textHead = "Looking Left"
-            elif y > 15:
-                textHead = "Looking Right"
-            elif x < -8:
-                textHead = "Looking Down"
-            elif x > 15:
-                textHead = "Looking Up"
-            else:
-                textHead = "Forward"
-            # Add the text on the image
-            cv2.putText(image, textHead, (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            Head_record_duration(textHead, image)
+                # Get the y rotation degree
+                x = angles[0] * 360
+                y = angles[1] * 360
+                
+                textHead = ''
+                # See where the user's head tilting
+                # Sensitivity increased (thresholds lowered)
+                if y < -8: # was -10
+                    textHead = "Looking Left"
+                elif y > 8: # was 15
+                    textHead = "Looking Right"
+                elif x < -5: # was -8
+                    textHead = "Looking Down"
+                elif x > 8: # was 15
+                    textHead = "Looking Up"
+                else:
+                    textHead = "Forward"
+
+                # DEBUG overlay for angles
+                try:
+                    cv2.putText(image, f"X:{int(x)} Y:{int(y)}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                except: pass
+
+                # Mouth Analysis (MAR)
+                try:
+                    # Get full landmarks for MAR
+                    lms = face_landmarks.landmark
+                    mar = calculate_mar(lms)
+                    if mar > 0.4: # Threshold for talking/yawning
+                        # textHead = f"Mouth Open ({mar:.2f})" # Don't overwrite Gaze text, just flag?
+                        cv2.putText(image, f"Mouth Open ({mar:.2f})", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                except Exception as e:
+                    pass
+                    
+                # Add the text on the image
+                cv2.putText(image, textHead, (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                Head_record_duration(textHead, image)
+    except Exception as e:
+        print(f"Error in HeadMovement: {e}")
 
 
 #Third : More than one person Detection Function
@@ -1078,7 +1145,8 @@ def electronicDevicesDetection(frame):
     
     try:
         # Predict on image with lower confidence threshold for better detection
-        detect_params = model.predict(source=[frame], conf=0.3, save=False, verbose=False)
+        # Lowered to 0.25 based on user feedback
+        detect_params = model.predict(source=[frame], conf=0.25, save=False, verbose=False)
         
         for result in detect_params:  # iterate results
             boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
@@ -1087,13 +1155,19 @@ def electronicDevicesDetection(frame):
                 confidence = float(box.conf[0])
                 
                 # Log all detections for debugging
-                print(f"YOLO Detected: {detected_obj} (confidence: {confidence:.2f})")
+                # print(f"YOLO Detected: {detected_obj} (confidence: {confidence:.2f})")
                 
-                # Check for electronic devices (cell phone is the primary target)
-                if detected_obj in ['cell phone', 'remote', 'laptop', 'tv', 'keyboard', 'mouse']:
+                # Check for electronic devices and BOOKS
+                if detected_obj in ['cell phone', 'remote', 'laptop', 'tv', 'keyboard', 'mouse', 'book']:
                     EDFlag = True
-                    textED = 'Electronic Device Detected'
+                    textED = f'{detected_obj.title()} Detected'
                     print(f"⚠️ VIOLATION: {detected_obj} detected with {confidence:.2f} confidence!")
+                    
+                    # Draw Bounding Box for Evidence
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    cv2.putText(frame, f"{detected_obj} {confidence:.2f}", (x1, y1 - 10), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                     break
             
             if EDFlag:
@@ -1108,6 +1182,69 @@ def electronicDevicesDetection(frame):
     
     # Reset flag for next detection cycle
     EDFlag = False
+
+# System Monitoring
+def check_prohibited_processes():
+    """Check for prohibited processes like Screen Sharing or Remote Desktop."""
+    prohibited = ["TeamViewer.exe", "AnyDesk.exe", "Zoom.exe", "Discord.exe", "Skype.exe", "chrome.exe" ] # chrome is tricky as we use it, but maybe remote desktop version?
+    # Better list:
+    prohibited_apps = ["TeamViewer.exe", "AnyDesk.exe", "Zoom.exe", "webex.exe"]
+    
+    try:
+        # Use tasklist for Windows compatibility without extra deps
+        output = subprocess.check_output("tasklist", shell=True).decode()
+        for app in prohibited_apps:
+            if app.lower() in output.lower():
+                print(f"PROHIBITED PROCESS DETECTED: {app}")
+                return app
+    except Exception as e:
+        print(f"Error checking processes: {e}")
+    return None
+
+def check_extension_heartbeat():
+    """Verify extensions is sending heartbeats."""
+    global extension_heartbeat_time
+    if extension_heartbeat_time == 0:
+        return True # Not started yet
+    
+    if time.time() - extension_heartbeat_time > 60: # 1 minute timeout
+        print("EXTENSION HEARTBEAT LOST!")
+        return False
+    return True
+
+# MAR Calculation for Mouth Detection
+def calculate_mar(lips):
+    # lips indices: 
+    # Upper: [82, 13, 312] (but usually we take specific points for MAR)
+    # Ref: https://github.com/ali-h-khasemi/Mouth-Down-Interval-Detection
+    # 6 points: P1(img, 61), P2(img, 291) - corners
+    # P3(img, 81), P4(img, 178), P5(img, 311), P6(img, 402) - upper/lower lips
+    # Let's use simpler index logic if we get landmarks directly as objects
+    
+    # Distance function
+    def dist(p1, p2):
+        return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
+
+    # 4 vertical points pairs, 1 horizontal pair
+    # Using mediapipe indices directly (approximate inner lip)
+    # UpperInner: 78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308
+    # LowerInner: 78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308
+    
+    # Simple MAR: (p2-p8) + (p3-p7) + (p4-p6) / 2*(p1-p5) ??
+    # A simplified approach using upper lip bottom and lower lip top
+    # 13 (upper lip mid), 14 (lower lip mid)
+    # 78 (left corner), 308 (right corner)
+    
+    u_mid = lips[13]
+    l_mid = lips[14]
+    l_corner = lips[78]
+    r_corner = lips[308]
+    
+    vertical = math.sqrt((u_mid.x - l_mid.x)**2 + (u_mid.y - l_mid.y)**2)
+    horizontal = math.sqrt((l_corner.x - r_corner.x)**2 + (l_corner.y - r_corner.y)**2)
+    
+    if horizontal == 0: return 0
+    return vertical / horizontal
 
 #Sixth Function : Voice Detection
 class Recorder:
@@ -1357,6 +1494,19 @@ def cheat_Detection2():
             print(f"SHORTCUT DETECTED: {shortcut_event_name}")
             Shortcut_record_duration(f"Shortcut ({shortcut_event_name}) detected", image)
             shortcut_flag = False
+            
+        # System Monitoring Checks (Every ~5 seconds efficiently)
+        if frame_count % 100 == 0:
+            bad_app = check_prohibited_processes()
+            if bad_app:
+                print(f"⚠️ PROHIBITED APP: {bad_app}")
+                terminate_exam(f"Prohibited Application Detected: {bad_app}", image1)
+                break
+            
+            if not check_extension_heartbeat():
+                 print("⚠️ BROWSER EXTENSION DISABLED")
+                 # terminate_exam("Browser Extension Disabled or Removed", image1)
+                 # warn first?
     
     print("=== CHEAT DETECTION 2 STOPPED ===")
     deleteTrashVideos()

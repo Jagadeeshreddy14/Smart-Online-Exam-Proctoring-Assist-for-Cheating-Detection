@@ -94,20 +94,18 @@ executor = ThreadPoolExecutor(max_workers=4)
 # Function to show face detection's Rectangle in Face Input Page
 def capture_by_frames():
     """Video streaming route for face detection."""
-    # We rely on utils.cap being opened by the exam route or system check
-    # But as a fallback, we can try to open it if it's completely missing
-    if not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened():
-        print("Camera not open, attempting to open in capture_by_frames")
-        utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    # We rely on utils.cap being opened by the master_frame_reader thread
+    # Removed local fallback to prevent race conditions/conflicts on Windows
+    # if not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened():
+    #     print("Camera not open, attempting to open in capture_by_frames")
+    #     utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     
     while True:
+        # Wait for master thread to initialize camera
         if not hasattr(utils, 'cap') or not utils.cap or not utils.cap.isOpened():
-            print("Camera lost or not open in capture_by_frames")
-            time.sleep(1)
-            # Re-try open if lost
-            utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            if not utils.cap.isOpened():
-                break
+            # print("Waiting for camera...")
+            time.sleep(0.5)
+            continue
             
         frame = utils.get_frame()
         if frame is None:
@@ -871,6 +869,14 @@ def chat():
         
     return jsonify({"response": response})
 
+@app.route('/api/lockdown_heartbeat', methods=['POST'])
+def lockdown_heartbeat():
+    """Receive heartbeat from Chrome Extension."""
+    data = request.json
+    utils.extension_heartbeat_time = time.time()
+    # print(f"Heartbeat received: {data}")
+    return jsonify({"success": True})
+
 # Admin Related Routes
 @app.route('/adminResults')
 def adminResults():
@@ -1142,4 +1148,5 @@ if __name__ == '__main__':
     print("="*50 + "\n")
     
     # Run the application
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    # CRITICAL: use_reloader=False prevents double execution of global code (camera init)
+    app.run(debug=True, host='127.0.0.1', port=5000, use_reloader=False)

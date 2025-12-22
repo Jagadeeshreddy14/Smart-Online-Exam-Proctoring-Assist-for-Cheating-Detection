@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
     <link rel="stylesheet" href="{{url_for('static', filename='css/quiz.css')}}">
     <link rel="stylesheet" href="{{url_for('static', filename='css/chat.css')}}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 
@@ -156,6 +157,241 @@
     "></div>
 
     <style>
+        /* New Countdown Overlay Styles */
+        .warning-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(20px);
+            z-index: 10000;
+            display: flex;
+            /* Hidden by default via inline style or script */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            animation: fadeIn 0.3s ease-out;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .warning-container {
+            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+            padding: 60px 80px;
+            border-radius: 32px;
+            border: 2px solid rgba(239, 68, 68, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(239, 68, 68, 0.2), 0 0 80px rgba(239, 68, 68, 0.15);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .warning-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #ef4444, #dc2626, #ef4444);
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .camera-icon-container {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-icon-bg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 0 80px rgba(239, 68, 68, 0.3);
+            animation: pulse-icon 2s ease-in-out infinite;
+        }
+
+        .camera-icon {
+            font-size: 56px;
+            color: white;
+        }
+
+        .red-x {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 40px;
+            background: #dc2626;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #1a1a1a;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .red-x::before,
+        .red-x::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 3px;
+            background: white;
+            border-radius: 2px;
+        }
+
+        .red-x::before {
+            transform: rotate(45deg);
+        }
+
+        .red-x::after {
+            transform: rotate(-45deg);
+        }
+
+        .warning-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ef4444;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
+        }
+
+        .warning-message {
+            font-size: 18px;
+            color: #fca5a5;
+            margin-bottom: 40px;
+            line-height: 1.5;
+        }
+
+        .countdown-timer {
+            font-size: 96px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -4px;
+            color: #ef4444;
+            margin: 30px 0;
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.5), 0 0 40px rgba(239, 68, 68, 0.3);
+            animation: timer-pulse 1s ease-in-out infinite;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            margin: 30px 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+            border-radius: 6px;
+            width: 50%;
+            transition: width 1s linear;
+            position: relative;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+        }
+
+        .im-back-button {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+            margin-top: 20px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .im-back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(6, 182, 212, 0.5);
+            background: linear-gradient(135deg, #0891b2, #2563eb);
+        }
+
+        .urgency-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+            }
+
+            50% {
+                opacity: 0.7;
+                box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
+            }
+        }
+
+        @keyframes pulse-icon {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes timer-pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
         @keyframes slideIn {
             from {
                 transform: translateX(400px);
@@ -213,99 +449,36 @@
         </footer>
     </main>
 
-    <div id="cameraAbsenceOverlay" style="
-        display: none;
-        position: fixed;
-        top: 0; 
-        left: 0; 
-        width: 100%; 
-        height: 100%; 
-        background: rgba(0, 0, 0, 0.85); 
-        backdrop-filter: blur(15px); 
-        z-index: 10000;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        color: white;
-        text-align: center;
-        font-family: 'Inter', sans-serif;
-    ">
-        <div style="
-            background: rgba(23, 23, 23, 0.95);
-            padding: 50px 60px;
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
-            max-width: 550px;
-            width: 90%;
-            animation: fadeIn 0.3s ease-out;
-            position: relative;
-            overflow: hidden;
-        ">
-            <!-- Icon Container -->
-            <div id="absenceIconContainer" style="
-                width: 90px; 
-                height: 90px; 
-                background: linear-gradient(135deg, #f59e0b, #d97706); 
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin: 0 auto 24px;
-                font-size: 44px;
-                box-shadow: 0 0 30px rgba(245, 158, 11, 0.4);
-                transition: all 0.3s ease;
-            ">
-                <i class='bx bxs-zap'></i>
+    <div id="cameraAbsenceOverlay" class="warning-overlay" style="display: none;">
+        <div class="urgency-indicator"></div>
+
+        <div class="warning-container">
+            <!-- Camera Icon with Red X -->
+            <div class="camera-icon-container">
+                <div class="camera-icon-bg">
+                    <!-- Ensure boxicons is loaded for this icon, using 'fas fa-camera' or similar if 'bx' not available -->
+                    <!-- The existing head includes boxicons from unpkg potentially? No, it uses bootstrap mainly. Let's use simple SVG or ensure boxicons is there. -->
+                    <!-- Actually Exam.html has <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>? No. -->
+                    <!-- We need to add Boxicons CD to head or use existing FontAwesome. Exam.html has <i class="fas fa-microphone"></i> so FontAwesome is there. -->
+                    <i class="fas fa-camera camera-icon"></i>
+                </div>
+                <div class="red-x"></div>
             </div>
 
-            <h2 id="absenceTitle" style="font-size: 26px; margin-bottom: 10px; font-weight: 700;">Return to camera view
-                within:</h2>
+            <!-- Warning Text -->
+            <h1 class="warning-title" id="absenceTitle">⚠️ WARNING</h1>
+            <p class="warning-message" id="absenceMessage">No face detected in camera.<br>Return immediately.</p>
 
-            <!-- Timer Display -->
-            <div style="margin: 30px 0;">
-                <div id="absenceTimer" style="
-                    font-size: 64px; 
-                    font-weight: 800; 
-                    font-variant-numeric: tabular-nums;
-                    letter-spacing: -2px;
-                    line-height: 1;
-                ">00:30</div>
-            </div>
+            <!-- Large Countdown Timer -->
+            <div class="countdown-timer" id="absenceTimer">00:30</div>
 
             <!-- Progress Bar -->
-            <div style="
-                width: 100%;
-                height: 8px;
-                background: rgba(255,255,255,0.1);
-                border-radius: 4px;
-                margin-bottom: 30px;
-                overflow: hidden;
-            ">
-                <div id="absenceProgressBar" style="
-                    width: 100%;
-                    height: 100%;
-                    background: #f59e0b;
-                    transition: width 1s linear, background-color 0.3s ease;
-                "></div>
+            <div class="progress-container">
+                <div class="progress-bar" id="absenceProgressBar" style="width: 100%;"></div>
             </div>
 
-            <p id="absenceMessage" style="color: #9ca3af; margin-bottom: 30px; font-size: 16px;">
-                Your face must be visible to continue the exam.
-            </p>
-
-            <button id="imBackButton" onclick="checkUserPresence()" style="
-                background: rgba(255,255,255,0.1);
-                border: 1px solid rgba(255,255,255,0.2);
-                padding: 16px 40px;
-                color: white;
-                font-size: 16px;
-                font-weight: 500;
-                border-radius: 12px;
-                cursor: pointer;
-                transition: all 0.2s;
-                width: 100%;
-            ">
+            <!-- I'm Back Button -->
+            <button class="im-back-button" onclick="checkUserPresence()">
                 I'm Back
             </button>
         </div>

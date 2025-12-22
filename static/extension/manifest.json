@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Exam Proctor Lockdown",
+  "version": "1.0",
+  "description": "Enforces exam rules: Fullscreen, No Tabs, No Right-Click.",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Exam Proctor Active"
+  }
+}
