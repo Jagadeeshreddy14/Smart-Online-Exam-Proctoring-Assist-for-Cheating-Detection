@@ -2,8 +2,8 @@
 
 The Online Exam Proctor System is a computer vision-based project designed to ensure the integrity and fairness of online exams. As the popularity of remote learning and online education grows, the need for a robust proctoring system becomes crucial to prevent cheating and maintain the credibility of the examination process. This project will leverage computer vision and AI technologies to monitor and analyze students' behavior during the examination to detect any suspicious activities. It also has the ability to detect speeches to stay one step ahead of the students and to strengthen the anti-cheating methods.
 
-## The System Architecture
-https://img.sanishtech.com/u/923c5b420895cd32ed21dbaac00ec9d5.png
+## <h2>System Architecture</h2>
+<img src="https://img.sanishtech.com/u/923c5b420895cd32ed21dbaac00ec9d5.png" alt="System Architecture" width="800"/>
 
 
 
