@@ -26,7 +26,11 @@ The features included in the project are as follows:
 - **Prohibited Keys Detection**: To identify and flag the use of restricted or unauthorized keys on the computer’s keyboard during the exam to prevent cheating.
 - **‘Move away from the Test Interface’ Detection**: To monitor and detect any attempts made by the student to switch or interact with other windows or applications during the exam.
 
-### (5) Voice Detection
+### (5) Electronic Device Detection
+- **Mobile Phone Detection**: Automatically terminates the exam immediately when a mobile phone is detected in the frame.
+- **Other Electronic Devices**: Detects laptops, tablets, remotes, keyboards, mice, and books that may be used for cheating.
+
+### (6) Voice Detection
 - **Common Noise Detection**: To detect possible noises that may occur during the examination process to identify whether it is cheating or not.
 
 ## Tools Utilized

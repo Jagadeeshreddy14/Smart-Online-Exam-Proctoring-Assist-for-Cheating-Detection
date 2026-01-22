@@ -78,6 +78,9 @@ def fetch_last_id():
 
 resultId = fetch_last_id() + 1
 
+# Track current active result ID during exam
+current_exam_result_id = None
+
 def stop_proctoring():
     global stop_proctoring_flag, Globalflag, cap
     print("Stopping proctoring...")
@@ -236,6 +239,13 @@ def master_frame_reader():
             try:
                 print("Master Reader: Opening Camera...")
                 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                
+                # Optimize camera settings for better performance
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                cap.set(cv2.CAP_PROP_FPS, 20)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize lag
+                
                 if not cap.isOpened():
                     print("Master Reader: Failed to open camera, retrying...")
                     time.sleep(1)
@@ -251,8 +261,9 @@ def master_frame_reader():
             try:
                 success, frame = cap.read()
                 if success:
+                    # Only update frame if it's a new frame to avoid unnecessary copying
                     with frame_lock:
-                        global_frame = frame.copy() if frame is not None else None
+                        global_frame = frame  # Direct assignment to reduce copy overhead
                 else:
                     print("Master Frame Reader: Failed to read frame from camera")
                     time.sleep(0.01)
@@ -269,6 +280,19 @@ def get_frame():
     global global_frame
     with frame_lock:
         return global_frame.copy() if global_frame is not None else None
+
+
+def get_optimized_frame():
+    """Retrieve the latest frame from the shared buffer with optional resizing for performance."""
+    global global_frame
+    with frame_lock:
+        if global_frame is not None:
+            # Optionally resize frame for faster processing in detection functions
+            height, width = global_frame.shape[:2]
+            if width > 640 or height > 480:  # Only resize if larger than optimal size
+                return cv2.resize(global_frame, (640, 480))
+            return global_frame.copy()
+        return None
 
 
 #Database and Files Related
@@ -812,38 +836,38 @@ class FaceRecognition:
         text = ""
         if not cap.isOpened():
             sys.exit('Video source not found...')
-
+    
         while Globalflag and not stop_proctoring_flag:
-            frame = get_frame()
+            frame = get_optimized_frame()  # Use optimized frame function
             if frame is None:
-                time.sleep(0.05)
+                time.sleep(0.02)  # Reduced sleep time for smoother response
                 continue
-            
+                
             text = "Verified Student disappeared"
             print("Running Face Verification Function")
             # Only process every other frame of video to save time
             if self.process_current_frame:
                 # Resize frame of video to 1/4 size for faster face recognition processing
                 small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-
+    
                 # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
                 #rgb_small_frame = small_frame[:, :, ::-1]
                 rgb_small_frame = np.ascontiguousarray(small_frame[:, :, ::-1])
-
-                # Find all the faces and face encodings in the current frame of video
+    
+                # Find all the faces and face_encodings in the current frame of video
                 self.face_locations = face_recognition.face_locations(rgb_small_frame)
                 self.face_encodings = face_recognition.face_encodings(rgb_small_frame, self.face_locations)
-
+    
                 self.face_names = []
                 for face_encoding in self.face_encodings:
                     # See if the face is a match for the known face(s)
                     matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
                     name = "Unknown"
                     confidence = '???'
-
+    
                     # Calculate the shortest distance to face
                     face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
-
+    
                     best_match_index = np.argmin(face_distances)
                     if matches[best_match_index]:
                         tempname = str(self.known_face_names[best_match_index]).split('_')[0]
@@ -851,11 +875,11 @@ class FaceRecognition:
                         if tempname == Student_Name and float(tempconfidence[:-1]) >= 84:
                             name = tempname
                             confidence = tempconfidence
-
+    
                     self.face_names.append(f'{name} ({confidence})')
-
+    
             self.process_current_frame = not self.process_current_frame
-
+    
             # Display the results
             for (top, right, bottom, left), name in zip(self.face_locations, self.face_names):
                 # Scale back up face locations since the frame we detected in was scaled to 1/4 size
@@ -869,12 +893,15 @@ class FaceRecognition:
                 cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
                 cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
                 cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
-
+    
             # Display the resulting image
            # cv2.imshow('Face Recognition', frame)
             print(text)
             faceDetectionRecording(frame, text)
             # Hit 'q' on the keyboard to quit!
+                
+            # Small delay to prevent overwhelming the CPU
+            time.sleep(0.01)  # Add small delay for smoother performance
 
 #Second: Head Movement Detection Function
 def headMovmentDetection(image, face_mesh):
@@ -1146,7 +1173,7 @@ def electronicDevicesDetection(frame):
     try:
         # Predict on image with lower confidence threshold for better detection
         # Lowered to 0.25 based on user feedback
-        detect_params = model.predict(source=[frame], conf=0.25, save=False, verbose=False)
+        detect_params = model.predict(source=[frame], conf=0.20, save=False, verbose=False)  # Slightly lowered confidence for better sensitivity
         
         for result in detect_params:  # iterate results
             boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
@@ -1168,6 +1195,28 @@ def electronicDevicesDetection(frame):
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                     cv2.putText(frame, f"{detected_obj} {confidence:.2f}", (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                    
+                    # TERMINATE EXAM IMMEDIATELY IF MOBILE PHONE IS DETECTED
+                    if detected_obj == 'cell phone':
+                        print(f"📱 MOBILE PHONE DETECTED - TERMINATING EXAM IMMEDIATELY")
+                        # Save violation evidence image
+                        img_filename = f"mobile_phone_violation_{int(time.time())}.jpg"
+                        cv2.imwrite(img_filename, frame)
+                        move_file_to_output_folder(img_filename, 'Violations')
+                        
+                        # Create violation record
+                        phone_violation = {
+                            "Name": "Mobile Phone Detected",
+                            "Time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "Duration": "N/A",
+                            "Mark": 100,  # High penalty for mobile phone
+                            "Link": "N/A",
+                            "Image": img_filename,
+                            "RId": get_resultId()
+                        }
+                        write_json(phone_violation)
+                        terminate_exam("Mobile Phone Detected", frame)
+                        return  # Exit the function immediately
                     break
             
             if EDFlag:
@@ -1405,16 +1454,19 @@ def cheat_Detection1():
         face_mesh = None
     print(f'CD1 Flag is {Globalflag}')
     while Globalflag:
-        image = get_frame()
+        image = get_optimized_frame()  # Use optimized frame function
         if image is None:
-            time.sleep(0.05)
+            time.sleep(0.02)  # Reduced sleep time for smoother response
             continue
         
         if face_mesh is not None:
             headMovmentDetection(image, face_mesh)
         else:
             # Skip head movement detection if face_mesh is not available
-            time.sleep(0.1)
+            time.sleep(0.01)  # Reduced sleep time for smoother response
+        
+        # Small delay to prevent overwhelming the CPU
+        time.sleep(0.01)  # Add small delay for smoother performance
     if Globalflag:
         cap.release()
     deleteTrashVideos()
@@ -1425,7 +1477,7 @@ def cheat_Detection2():
 
     deleteTrashVideos()
     frame_count = 0
-    skip_frames = 2  # Process every 3rd frame for speed
+    skip_frames = 1  # Process every frame for better detection, but optimize processing
     
     # Initialize status
     no_person_status['detected'] = True
@@ -1437,29 +1489,23 @@ def cheat_Detection2():
     TOTAL_TIMEOUT = 30 
     
     while Globalflag:
-        image = get_frame()
+        image = get_optimized_frame()  # Use optimized frame function
         if image is None:
-            time.sleep(0.05)
+            time.sleep(0.02)  # Reduced sleep time for smoother response
             continue
         
-        # Skip frames for faster processing
+        # Skip frames for faster processing - reduced skip to improve responsiveness
         frame_count += 1
         if frame_count % skip_frames != 0:
             continue
         
-        # Resize for faster processing (reduce to 640x480)
-        try:
-            image_resized = cv2.resize(image, (640, 480))
-            # Lighter brightness enhancement (faster)
-            image_processed = cv2.convertScaleAbs(image_resized, alpha=1.15, beta=25)
-        except Exception:
-            # Fallback if resize fails
-            image_processed = image.copy()
+        # Use the image directly since get_optimized_frame already resizes if needed
+        image_processed = image
         
         if frame_count % 60 == 0:  # Log every 60 frames (~2 seconds)
             print(f"Processing frame {frame_count} - Detection active (Optimized)")
         
-        image1 = image_processed.copy()
+        image1 = image_processed
         
         # Check for person detection first
         person_detected = check_person_present(image1)
@@ -1485,10 +1531,10 @@ def cheat_Detection2():
             no_person_status['detected'] = True
             no_person_status['start_time'] = None
         
-        # Run other detections
+        # Run other detections - only run when needed to optimize performance
         MTOP_Detection(image1)
         screenDetection()
-        electronicDevicesDetection(image1.copy())
+        electronicDevicesDetection(image1)  # Pass the original image reference instead of copy
         
         if shortcut_flag:
             print(f"SHORTCUT DETECTED: {shortcut_event_name}")
@@ -1496,7 +1542,7 @@ def cheat_Detection2():
             shortcut_flag = False
             
         # System Monitoring Checks (Every ~5 seconds efficiently)
-        if frame_count % 100 == 0:
+        if frame_count % 50 == 0:  # Increased frequency for system checks
             bad_app = check_prohibited_processes()
             if bad_app:
                 print(f"⚠️ PROHIBITED APP: {bad_app}")
@@ -1507,6 +1553,9 @@ def cheat_Detection2():
                  print("⚠️ BROWSER EXTENSION DISABLED")
                  # terminate_exam("Browser Extension Disabled or Removed", image1)
                  # warn first?
+        
+        # Small delay to prevent overwhelming the CPU
+        time.sleep(0.005)  # Very small delay to balance performance and CPU usage
     
     print("=== CHEAT DETECTION 2 STOPPED ===")
     deleteTrashVideos()
@@ -1536,14 +1585,24 @@ def get_resultId():
     return resultId
 
 def get_suspicion_log():
-    with open('suspicion_log.json','r+') as file:
+    # Check if file exists, if not create an empty one
+    if not os.path.exists('suspicion_log.json'):
+        with open('suspicion_log.json', 'w') as f:
+            json.dump([], f)
+    
+    with open('suspicion_log.json','r') as file:
         # First we load existing data into a dict.
         file_data = json.load(file)
         return file_data
 
 #Function to give the trust score
 def get_TrustScore(Rid):
-    with open('violation.json', 'r+') as file:
+    # Check if file exists, if not create an empty one
+    if not os.path.exists('violation.json'):
+        with open('violation.json', 'w') as f:
+            json.dump([], f)
+    
+    with open('violation.json', 'r') as file:
         # First we load existing data into a dict.
         file_data = json.load(file)
         filtered_data = [item for item in file_data if item["RId"] == Rid]
@@ -1552,21 +1611,34 @@ def get_TrustScore(Rid):
 
 #Function to give all results
 def getResults():
-    with open('result.json', 'r+') as file:
+    # Check if file exists, if not create an empty one
+    if not os.path.exists('result.json'):
+        with open('result.json', 'w') as f:
+            json.dump([], f)
+    
+    with open('result.json', 'r') as file:  # Changed to 'r' mode for safety
         # First we load existing data into a dict.
         result_data = json.load(file)
         return result_data
 
 #Function to give result details
 def getResultDetails(rid):
-    with open('result.json', 'r+') as file:
-        # First we load existing data into a dict.
+    # Handle result.json
+    if not os.path.exists('result.json'):
+        with open('result.json', 'w') as f:
+            json.dump([], f)
+    with open('result.json', 'r') as file:
         result_data = json.load(file)
         filtered_result = [item for item in result_data if item["Id"] == int(rid)]
-    with open('violation.json', 'r+') as file:
-        # First we load existing data into a dict.
+    
+    # Handle violation.json
+    if not os.path.exists('violation.json'):
+        with open('violation.json', 'w') as f:
+            json.dump([], f)
+    with open('violation.json', 'r') as file:
         violation_data = json.load(file)
         filtered_violations = [item for item in violation_data if item["RId"] == int(rid)]
+    
     resultDetails = {
             "Result": filtered_result,
             "Violation": filtered_violations

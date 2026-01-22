@@ -22,7 +22,7 @@ mss>=6.1.0
 # Alert System
 gTTS>=2.3.1
 pygame>=2.1.2
-playsound>=1.3.0
+# playsound==1.2.2  # Removed due to Windows installation issues, not currently used in code
 
 # Reporting System
 pdfkit>=1.0.0
