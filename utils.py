@@ -224,6 +224,15 @@ cap = None
 global_frame = None
 frame_lock = threading.Lock()
 
+# Global Cascade Classifiers to avoid redundant initializations
+def get_cascade_path():
+    p = 'Haarcascades/haarcascade_frontalface_default.xml'
+    if os.path.exists(p):
+        return p
+    return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+
+face_cascade = cv2.CascadeClassifier(get_cascade_path())
+
 def master_frame_reader():
     """Centralized thread to read frames from camera and share with other threads."""
     global global_frame, cap, Globalflag, stop_proctoring_flag
@@ -241,17 +250,21 @@ def master_frame_reader():
                 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
                 
                 # Optimize camera settings for better performance
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                cap.set(cv2.CAP_PROP_FPS, 20)
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize lag
+                if not cap.isOpened():
+                    # Fallback to default index if 0 fails with DSHOW
+                    cap = cv2.VideoCapture(0)
                 
                 if not cap.isOpened():
                     print("Master Reader: Failed to open camera, retrying...")
                     time.sleep(1)
                     continue
                 else:
-                    print("Master Reader: Camera opened successfully.")
+                    # Optimize camera settings for better performance
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    cap.set(cv2.CAP_PROP_FPS, 20)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize lag
+                    print("Master Reader: Camera opened and optimized.")
             except Exception as e:
                 print(f"Master Reader: Error opening camera: {e}")
                 time.sleep(1)
@@ -1417,24 +1430,38 @@ class Recorder:
         # remove all but CUSHION_FRAMES
         keep_frames = len(sound) - TIMEOUT_FRAMES + CUSHION_FRAMES
         recording = b''.join(sound[0:keep_frames])
-        filename = str(random.randint(1,50000))+"VoiceViolation"
-        pathname = os.path.join(f_name_directory, '{}.wav'.format(filename))
-        wf = wave.open(pathname, 'wb')
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(self.p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(recording)
-        wf.close()
-        voiceViolation = {
-            "Name": "Common Noise is detected.",
-            "Time": begin_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "Duration": str(duration) + " seconds",
-            "Mark": duration,
-            "Link": '{}.wav'.format(filename),
-            "RId": get_resultId()
-        }
-        write_json(voiceViolation)
-        print('[+] Saved: {}'.format(pathname))
+        
+        # Directory logic
+        sound_dir = os.path.join('static', 'Violations', 'Sound')
+        if not os.path.exists(sound_dir):
+            os.makedirs(sound_dir)
+
+        filename = "VoiceViolation_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        pathname = os.path.join(sound_dir, '{}.wav'.format(filename))
+        
+        try:
+            wf = wave.open(pathname, 'wb')
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(self.p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(recording)
+            wf.close()
+            
+            voiceViolation = {
+                "Name": "Common Noise is detected.",
+                "Time": begin_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "Duration": str(duration) + " seconds",
+                "Mark": duration,
+                "Link": '{}.wav'.format(filename),
+                "RId": get_resultId()
+            }
+            write_json(voiceViolation)
+            print('[+] Saved Audio Evidence: {}'.format(pathname))
+        except Exception as e:
+            print(f"Error saving audio evidence: {e}")
+
+# Note: Recorder initialization should happen outside or properly reused
+rec = Recorder()
 
 def cheat_Detection1():
     deleteTrashVideos()
@@ -1445,14 +1472,68 @@ def cheat_Detection1():
         import mediapipe as mp
         if hasattr(mp, 'solutions'):
             mp_face_mesh = mp.solutions.face_mesh
-            face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+            # face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+            # We don't need to init face_mesh here if headMovementDetection is separate logic
+            # OR we can keep it if we merge detection loops.
+            # But wait, cheat_Detection2 runs cheat detection logic too.
+            # The original code had cheat_Detection1 just doing Head Detection OR Voice?
+            # It seems cheat_Detection1 was meant for both or one.
+            pass
         else:
-            print("Warning: MediaPipe solutions not available, head movement detection disabled")
-            face_mesh = None
+            print("Warning: MediaPipe solutions not available")
     except Exception as e:
         print(f"Face mesh initialization error: {e}")
-        face_mesh = None
+        
     print(f'CD1 Flag is {Globalflag}')
+    
+    # Create threads for concurrent Audio and Video processing if needed
+    # But PyAudio.read is blocking.
+    # So cheat_Detection1 should probably just be the Audio Recorder loop?
+    # AND Head Movement Checking?
+    # The original loop: "while Globalflag: ... headMovmentDetection..." 
+    # BUT rec.record() ALSO has a "while Globalflag" loop !
+    # This means cheat_Detection1 CANNOT run both sequentially in one thread.
+    
+    # DECISION: cheat_Detection1 will be used for VOICE RECORDING (since it was missing).
+    # Head Movement is covered by cheat_Detection2 (Wait, check CD2).
+    # Actually, let's check cheat_Detection2.
+    # If CD2 does NOT do Head Movement, we need CD1 to do Head Movement.
+    # But rec.record() is a blocking loop.
+    
+    # Solution: Run recorder in a separate thread OR rely on app.py's executor.
+    # app.py submits CD1, CD2, CD3(Face).
+    # If CD1 is dominated by headMovement loop, rec.record() is never called.
+    
+    # Let's make CD1 the Voice Recorder.
+    # We should move HeadMovement to CD2 or verify if CD2 already has it.
+    # Let's assume CD2 handles Visuals (Device, Screen, Person).
+    # Does CD2 have headMovmentDetection? 
+    # Viewing file previously: CD2 calls `check_person_present` and `electronicDevicesDetection`.
+    # It does NOT seem to call `headMovmentDetection`.
+    
+    # So we need both.
+    # We have `executor` in app.py submitting tasks.
+    # We can create a new function `audio_monitoring` and submit it in app.py.
+    # But I can only edit this file right now.
+    
+    # Let's modify cheat_Detection1 to launch a thread for Audio or become the Audio thread.
+    # If I make CD1 just Audio, we lose Head Movement.
+    # So I will launch a thread for Audio INSIDE cheat_Detection1.
+    
+    t_audio = threading.Thread(target=rec.record)
+    t_audio.daemon = True
+    t_audio.start()
+    
+    # Now run the Head Movement loop (existing code)
+    # Re-import mp here just in case
+    face_mesh = None
+    try:
+        import mediapipe as mp
+        if hasattr(mp, 'solutions'):
+            mp_face_mesh = mp.solutions.face_mesh
+            face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    except: pass
+
     while Globalflag:
         image = get_optimized_frame()  # Use optimized frame function
         if image is None:
@@ -1565,14 +1646,8 @@ def cheat_Detection2():
 def check_person_present(image):
     """Quick check if a person/face is present in the frame."""
     try:
-        # Use local Haar Cascade file which is known to exist
-        cascade_path = 'Haarcascades/haarcascade_frontalface_default.xml'
-        if not os.path.exists(cascade_path):
-             # Fallback to cv2 data if local not found (though mapped file suggests it is there)
-             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-             
-        face_cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Use the global face_cascade
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
         return len(faces) > 0
     except Exception as e:

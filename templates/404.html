@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found - Proctoring System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f8f9fa;
+            flex-direction: column;
+            text-align: center;
+        }
+        h1 { font-size: 3rem; color: #dc3545; margin-bottom: 0.5rem; }
+        p { font-size: 1.2rem; color: #6c757d; margin-bottom: 2rem; }
+        .btn {
+            background-color: #32be8f;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn:hover { background-color: #28a745; }
+    </style>
+</head>
+<body>
+    <h1>404</h1>
+    <p>Oops! The page you are looking for does not exist.</p>
+    <a href="{{ url_for('main') }}" class="btn">Go Back Home</a>
+</body>
+</html>

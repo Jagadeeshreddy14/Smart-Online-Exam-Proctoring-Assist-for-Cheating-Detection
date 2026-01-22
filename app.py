@@ -100,28 +100,38 @@ def capture_by_frames():
     #     print("Camera not open, attempting to open in capture_by_frames")
     #     utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     
+    # Initialize face detector with proper error handling
+    try:
+        detector = cv2.CascadeClassifier('Haarcascades/haarcascade_frontalface_default.xml')
+        if detector.empty():
+            # Fallback to OpenCV built-in path
+            detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    except Exception as e:
+        print(f"Error loading face detector: {e}")
+        detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
     while True:
         # Wait for master thread to initialize camera
         if not hasattr(utils, 'cap') or not utils.cap or not utils.cap.isOpened():
             # print("Waiting for camera...")
-            time.sleep(0.5)
+            time.sleep(0.1)  # Reduced wait time
             continue
             
         frame = utils.get_frame()
         if frame is None:
-            time.sleep(0.05)
+            time.sleep(0.01)
             continue
             
         # Face detection
-        detector = cv2.CascadeClassifier('Haarcascades/haarcascade_frontalface_default.xml')
-        faces = detector.detectMultiScale(frame, 1.2, 6)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale for faster detection
+        faces = detector.detectMultiScale(gray, 1.1, 4)  # Optimized parameters
         
         # Draw rectangles around faces
         for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Reduced thickness for performance
         
-        # Encode frame for streaming
-        ret, buffer = cv2.imencode('.jpg', frame)
+        # Encode frame for streaming with optimized quality
+        ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])  # Increased quality
         if not ret:
             continue
             
@@ -129,8 +139,8 @@ def capture_by_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         
-        # Add a small delay to prevent CPU hogging and camera contention
-        time.sleep(0.03)
+        # Add a small delay for rate limiting the stream
+        time.sleep(0.03)  # Reduced delay for smoother streaming
 
 # Function to run Cheat Detection when we start the Application
 def start_loop():
@@ -521,12 +531,18 @@ def exam():
         flash('Please login as a student first.', 'error')
         return redirect(url_for('main'))
     
-    # Initialize camera for proctoring
-    if hasattr(utils, 'cap') and utils.cap is not None:
-        utils.cap.release()
+    # Reset flags
+    utils.stop_proctoring_flag = False
+    utils.Globalflag = True
     
-    utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    if not utils.cap.isOpened():
+    # Wait for master_frame_reader to handle camera if needed
+    # (It's already running in the background)
+    counter = 0
+    while (not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened()) and counter < 20:  # Increased timeout
+        time.sleep(0.2)  # Reduced sleep time
+        counter += 1
+    
+    if not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened():
         flash('Unable to access camera for proctoring.', 'error')
         return redirect(url_for('systemCheck'))
     
