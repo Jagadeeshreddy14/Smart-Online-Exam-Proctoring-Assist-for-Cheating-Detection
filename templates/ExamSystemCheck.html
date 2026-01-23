@@ -1,276 +1,442 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>System Compatibility Check</title>
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <link href='https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css' rel='stylesheet'>
-    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
-    <link rel="stylesheet" href="{{url_for('static', filename='css/SystemCheck.css')}}">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://unpkg.com/boxicons@2.0.9/css/boxicons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{url_for('static', filename='css/style.css')}}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{url_for('static', filename='css/SystemCheck.css')}}"
+    />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-</head>
+  </head>
 
-<body>
-
+  <body>
     <nav>
-        <div class="logo">
-            <span class="P-title">The Online Exam Proctor</span>
-        </div>
-        <div class="nav-links">
-            <a class="links" href="#">Rules</a>
-            <a class="links" href="#">Requirements</a>
-        </div>
+      <div class="logo">
+        <span class="P-title">The Online Exam Proctor</span>
+      </div>
+      <div class="nav-links">
+        <a class="links" href="#">Rules</a>
+        <a class="links" href="#">Requirements</a>
+      </div>
     </nav>
 
     <!-- Background Orbs -->
     <div
-        style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; overflow:hidden; pointer-events:none;">
-        <div class="bg-orb orb-1" style="top: 20%; left: 10%; opacity: 0.3; width: 300px; height: 300px;"></div>
-        <div class="bg-orb orb-2" style="bottom: 20%; right: 10%; opacity: 0.3; width: 300px; height: 300px;"></div>
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        overflow: hidden;
+        pointer-events: none;
+      "
+    >
+      <div
+        class="bg-orb orb-1"
+        style="top: 20%; left: 10%; opacity: 0.3; width: 300px; height: 300px"
+      ></div>
+      <div
+        class="bg-orb orb-2"
+        style="
+          bottom: 20%;
+          right: 10%;
+          opacity: 0.3;
+          width: 300px;
+          height: 300px;
+        "
+      ></div>
     </div>
 
     <main class="table">
-        <section class="table__header">
-            <h1><i class='bx bx-devices'></i> System Check</h1>
-        </section>
+      <section class="table__header">
+        <h1><i class="bx bx-devices"></i> System Check</h1>
+      </section>
 
-        <section class="table__body">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Component</th>
-                        <th style="text-align: right;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>
-                            <i class='bx bxs-camera' style="margin-right: 8px; color: var(--primary);"></i> Webcam
-                        </td>
-                        <td><span id="webcam-status" style="color: var(--text-muted);">Checking...</span></td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <i class='bx bxs-microphone' style="margin-right: 8px; color: var(--secondary);"></i>
-                            Microphone
-                        </td>
-                        <td><span id="microphone-status" style="color: var(--text-muted);">Checking...</span></td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
+      <section class="table__body">
+        <table>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th style="text-align: right">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <i
+                  class="bx bxs-camera"
+                  style="margin-right: 8px; color: var(--primary)"
+                ></i>
+                Webcam
+              </td>
+              <td>
+                <span id="webcam-status" style="color: var(--text-muted)"
+                  >Checking...</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <i
+                  class="bx bxs-microphone"
+                  style="margin-right: 8px; color: var(--secondary)"
+                ></i>
+                Microphone
+              </td>
+              <td>
+                <span id="microphone-status" style="color: var(--text-muted)"
+                  >Checking...</span
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-        <section class="section-button">
-            <a href="#" class="next" id="ajax-link">
-                Continue to Exam <i class='bx bx-right-arrow-alt'></i>
-            </a>
-        </section>
+      <section class="section-button">
+        <a href="#" class="next" id="ajax-link">
+          Continue to Exam <i class="bx bx-right-arrow-alt"></i>
+        </a>
+      </section>
     </main>
 
     <footer>
-        <p>&copy; 2024 The Online Exam Proctor System</p>
+      <p>&copy; 2024 The Online Exam Proctor System</p>
     </footer>
 
-    <div id="micTestModal"
-        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; justify-content:center; align-items:center;">
+    <div
+      id="micTestModal"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 2000;
+        justify-content: center;
+        align-items: center;
+      "
+    >
+      <div
+        style="
+          background: var(--card-bg);
+          padding: 30px;
+          border-radius: 15px;
+          width: 90%;
+          max-width: 500px;
+          text-align: center;
+          position: relative;
+        "
+      >
+        <h3 style="margin-bottom: 20px; color: var(--text-color)">
+          Microphone Check
+        </h3>
+        <p style="margin-bottom: 25px; color: var(--text-muted)">
+          Please read the following sentence clearly:
+        </p>
+
         <div
-            style="background:var(--card-bg); padding:30px; border-radius:15px; width:90%; max-width:500px; text-align:center; position:relative;">
-            <h3 style="margin-bottom:20px; color:var(--text-color);">Microphone Check</h3>
-            <p style="margin-bottom:25px; color:var(--text-muted);">Please read the following sentence clearly:</p>
-
-            <div
-                style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; margin-bottom:25px; font-style:italic; font-size:1.1em; border-left: 4px solid var(--accent);">
-                "I verify that I am taking this exam honestly."
-            </div>
-
-            <div id="visualizer"
-                style="width:100%; height:10px; background:#333; border-radius:5px; margin-bottom:25px; overflow:hidden;">
-                <div id="volumeBar" style="width:0%; height:100%; background:var(--success); transition: width 0.1s;">
-                </div>
-            </div>
-
-            <p id="micMsg" style="height:20px; font-size:0.9em; margin-bottom:20px; color:var(--warning);">Waiting for
-                audio...</p>
-
-            <button id="startMicTestBtn" class="btn next" style="width:100%;">Start Recording</button>
-            <button id="closeMicModal"
-                style="position:absolute; top:15px; right:15px; background:none; border:none; color:var(--text-muted); font-size:1.5em; cursor:pointer;">&times;</button>
+          style="
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            font-style: italic;
+            font-size: 1.1em;
+            border-left: 4px solid var(--accent);
+          "
+        >
+          "I verify that I am taking this exam honestly."
         </div>
+
+        <div
+          id="visualizer"
+          style="
+            width: 100%;
+            height: 10px;
+            background: #333;
+            border-radius: 5px;
+            margin-bottom: 25px;
+            overflow: hidden;
+          "
+        >
+          <div
+            id="volumeBar"
+            style="
+              width: 0%;
+              height: 100%;
+              background: var(--success);
+              transition: width 0.1s;
+            "
+          ></div>
+        </div>
+
+        <p
+          id="micMsg"
+          style="
+            height: 20px;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            color: var(--warning);
+          "
+        >
+          Waiting for audio...
+        </p>
+
+        <button id="startMicTestBtn" class="btn next" style="width: 100%">
+          Start Recording
+        </button>
+        <button
+          id="closeMicModal"
+          style="
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5em;
+            cursor: pointer;
+          "
+        >
+          &times;
+        </button>
+      </div>
     </div>
 
     <script>
-        async function checkWebcamAndMicrophone() {
-            const webcamStatusElement = document.getElementById('webcam-status');
-            const microphoneStatusElement = document.getElementById('microphone-status');
+      async function checkWebcamAndMicrophone() {
+        const webcamStatusElement = document.getElementById("webcam-status");
+        const microphoneStatusElement =
+          document.getElementById("microphone-status");
 
-            console.log("Starting hardware compatibility check...");
+        console.log("Starting hardware compatibility check...");
 
-            // Check Webcam
-            try {
-                const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                webcamStatusElement.textContent = 'Available';
-                webcamStatusElement.style.color = '#4ade80';
-                console.log("Webcam access: SUCCESS");
-                videoStream.getTracks().forEach(track => track.stop());
-            } catch (error) {
-                console.error("Webcam access: FAILED", error);
-                webcamStatusElement.textContent = 'Not available';
-                webcamStatusElement.style.color = '#f87171';
-            }
-
-            // Check Microphone - Changed to "Click to Test"
-            microphoneStatusElement.innerHTML = '<button id="testMicBtn" style="background:var(--secondary); border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer; font-size:0.8em;">Test Microphone</button>';
-
-            document.getElementById('testMicBtn').addEventListener('click', function (e) {
-                e.preventDefault();
-                openMicTestModal();
-            });
+        // Check Webcam
+        try {
+          const videoStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          });
+          webcamStatusElement.textContent = "Available";
+          webcamStatusElement.style.color = "#4ade80";
+          console.log("Webcam access: SUCCESS");
+          videoStream.getTracks().forEach((track) => track.stop());
+        } catch (error) {
+          console.error("Webcam access: FAILED", error);
+          webcamStatusElement.textContent = "Not available";
+          webcamStatusElement.style.color = "#f87171";
         }
 
-        let audioContext;
-        let analyser;
-        let microphone;
-        let javascriptNode;
-        let micTestStream;
-        let isRecording = false;
+        // Check Microphone - Changed to "Click to Test"
+        microphoneStatusElement.innerHTML =
+          '<button id="testMicBtn" style="background:var(--secondary); border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer; font-size:0.8em;">Test Microphone</button>';
 
-        function openMicTestModal() {
-            document.getElementById('micTestModal').style.display = 'flex';
-        }
+        document
+          .getElementById("testMicBtn")
+          .addEventListener("click", function (e) {
+            e.preventDefault();
+            openMicTestModal();
+          });
+      }
 
-        document.getElementById('closeMicModal').addEventListener('click', function () {
+      let audioContext;
+      let analyser;
+      let microphone;
+      let javascriptNode;
+      let micTestStream;
+      let isRecording = false;
+
+      function openMicTestModal() {
+        document.getElementById("micTestModal").style.display = "flex";
+      }
+
+      document
+        .getElementById("closeMicModal")
+        .addEventListener("click", function () {
+          stopMicTest();
+          document.getElementById("micTestModal").style.display = "none";
+        });
+
+      document
+        .getElementById("startMicTestBtn")
+        .addEventListener("click", async function () {
+          if (isRecording) {
             stopMicTest();
-            document.getElementById('micTestModal').style.display = 'none';
-        });
+            return;
+          }
 
-        document.getElementById('startMicTestBtn').addEventListener('click', async function () {
-            if (isRecording) {
-                stopMicTest();
-                return;
-            }
-
-            try {
-                micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                audioContext = new AudioContext();
-                analyser = audioContext.createAnalyser();
-                microphone = audioContext.createMediaStreamSource(micTestStream);
-                javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-
-                analyser.smoothingTimeConstant = 0.8;
-                analyser.fftSize = 1024;
-
-                microphone.connect(analyser);
-                analyser.connect(javascriptNode);
-                javascriptNode.connect(audioContext.destination);
-
-                isRecording = true;
-                const btn = document.getElementById('startMicTestBtn');
-                btn.textContent = "Listening... (Read the sentence)";
-                btn.style.background = "var(--error)"; // Red to indicate recording
-                document.getElementById('micMsg').textContent = "Detecting voice...";
-                document.getElementById('micMsg').style.color = "var(--text-muted)";
-
-                let speechDetectedCount = 0;
-                const requiredSpeechCount = 15; // Roughly 1.5-2 seconds of speech
-
-                javascriptNode.onaudioprocess = function () {
-                    var array = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(array);
-                    var values = 0;
-
-                    var length = array.length;
-                    for (var i = 0; i < length; i++) {
-                        values += (array[i]);
-                    }
-
-                    var average = values / length;
-
-                    // Visualizer update
-                    document.getElementById('volumeBar').style.width = Math.min(100, average * 2) + '%';
-
-                    // Simple voice activity detection threshold
-                    if (average > 30) {
-                        speechDetectedCount++;
-                        if (speechDetectedCount > requiredSpeechCount) {
-                            // Success!
-                            stopMicTest(true);
-                        }
-                    }
-                }
-
-            } catch (err) {
-                console.error("Mic access error:", err);
-                document.getElementById('micMsg').textContent = "Microphone access denied or error.";
-                document.getElementById('micMsg').style.color = "var(--error)";
-            }
-        });
-
-        function stopMicTest(success = false) {
-            isRecording = false;
-            if (javascriptNode) javascriptNode.disconnect();
-            if (analyser) analyser.disconnect();
-            if (microphone) microphone.disconnect();
-            if (micTestStream) micTestStream.getTracks().forEach(track => track.stop());
-
-            javascriptNode = null;
-            analyser = null;
-            microphone = null;
-            micTestStream = null;
-
-            const btn = document.getElementById('startMicTestBtn');
-            btn.textContent = "Start Recording";
-            btn.style.background = "var(--success)";
-
-            if (success) {
-                document.getElementById('micTestModal').style.display = 'none';
-                const statusEl = document.getElementById('microphone-status');
-                statusEl.textContent = 'Available'; // Match exact string expected by submit logic
-                statusEl.style.color = '#4ade80';
-                // Show success feedback
-                // alert("Microphone verified successfully!"); 
-            }
-        }
-
-        checkWebcamAndMicrophone();
-
-        $(document).ready(function () {
-            $("#ajax-link").click(function (event) {
-                event.preventDefault();
-
-                const checkValue1 = document.getElementById('webcam-status').textContent;
-                // Get text content, clean it up (in case it still has the button code somehow, though replace should fix it)
-                // Actually the replace logic above fully replaces innerHTML, so if success, textContent is 'Available'.
-                // If not tested yet, it might be button text.
-                let checkValue2 = document.getElementById('microphone-status').textContent;
-
-                if (checkValue2.includes("Test Microphone")) {
-                    checkValue2 = "Not available";
-                }
-
-                // Simple check before sending
-                if (checkValue1 !== 'Available' || checkValue2 !== 'Available') {
-                    alert("Please verify both Webcam and Microphone before proceeding.");
-                    return;
-                }
-
-                $.ajax({
-                    url: "/systemCheck",
-                    type: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify({ input: checkValue1 + ';' + checkValue2 }),
-                    success: function (response) {
-                        window.location.href = "/" + response['output'];
-                    },
-                    error: function (xhr, status, error) {
-                        console.error("AJAX request failed:", error);
-                    }
-                });
+          try {
+            micTestStream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
             });
-        });
-    </script>
-</body>
+            audioContext = new AudioContext();
+            analyser = audioContext.createAnalyser();
+            microphone = audioContext.createMediaStreamSource(micTestStream);
+            javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
+            analyser.smoothingTimeConstant = 0.8;
+            analyser.fftSize = 1024;
+
+            microphone.connect(analyser);
+            analyser.connect(javascriptNode);
+            javascriptNode.connect(audioContext.destination);
+
+            isRecording = true;
+            const btn = document.getElementById("startMicTestBtn");
+            btn.textContent = "Listening... (Read the sentence)";
+            btn.style.background = "var(--error)"; // Red to indicate recording
+            document.getElementById("micMsg").textContent =
+              "Detecting voice...";
+            document.getElementById("micMsg").style.color = "var(--text-muted)";
+
+            let speechDetectedCount = 0;
+            const requiredSpeechCount = 15; // Roughly 1.5-2 seconds of speech
+
+            javascriptNode.onaudioprocess = function () {
+              var array = new Uint8Array(analyser.frequencyBinCount);
+              analyser.getByteFrequencyData(array);
+              var values = 0;
+
+              var length = array.length;
+              for (var i = 0; i < length; i++) {
+                values += array[i];
+              }
+
+              var average = values / length;
+
+              // Visualizer update
+              document.getElementById("volumeBar").style.width =
+                Math.min(100, average * 2) + "%";
+
+              // Simple voice activity detection threshold
+              if (average > 30) {
+                speechDetectedCount++;
+                if (speechDetectedCount > requiredSpeechCount) {
+                  // Success!
+                  stopMicTest(true);
+                }
+              }
+            };
+          } catch (err) {
+            console.error("Mic access error:", err);
+            document.getElementById("micMsg").textContent =
+              "Microphone access denied or error.";
+            document.getElementById("micMsg").style.color = "var(--error)";
+          }
+        });
+
+      function stopMicTest(success = false) {
+        isRecording = false;
+        if (javascriptNode) javascriptNode.disconnect();
+        if (analyser) analyser.disconnect();
+        if (microphone) microphone.disconnect();
+        if (micTestStream)
+          micTestStream.getTracks().forEach((track) => track.stop());
+
+        javascriptNode = null;
+        analyser = null;
+        microphone = null;
+        micTestStream = null;
+
+        const btn = document.getElementById("startMicTestBtn");
+        btn.textContent = "Start Recording";
+        btn.style.background = "var(--success)";
+
+        if (success) {
+          document.getElementById("micTestModal").style.display = "none";
+          const statusEl = document.getElementById("microphone-status");
+          statusEl.textContent = "Available"; // Match exact string expected by submit logic
+          statusEl.style.color = "#4ade80";
+          // Show success feedback
+          // alert("Microphone verified successfully!");
+        }
+      }
+
+      checkWebcamAndMicrophone();
+
+      $(document).ready(function () {
+        let systemCheckAttempts = 0;
+        const maxAttempts = 3;
+        
+        $("#ajax-link").click(function (event) {
+          event.preventDefault();
+
+          const checkValue1 =
+            document.getElementById("webcam-status").textContent;
+          // Get text content, clean it up (in case it still has the button code somehow, though replace should fix it)
+          // Actually the replace logic above fully replaces innerHTML, so if success, textContent is 'Available'.
+          // If not tested yet, it might be button text.
+          let checkValue2 =
+            document.getElementById("microphone-status").textContent;
+
+          if (checkValue2.includes("Test Microphone")) {
+            checkValue2 = "Not available";
+          }
+
+          // Simple check before sending
+          if (checkValue1 !== "Available" || checkValue2 !== "Available") {
+            systemCheckAttempts++;
+            
+            if (systemCheckAttempts >= maxAttempts) {
+              alert(
+                "Maximum attempts reached. Please ensure both Webcam and Microphone are working properly, then refresh the page and try again."
+              );
+              // Disable the button to prevent further attempts
+              $(this).prop('disabled', true).text('Maximum Attempts Reached');
+              return;
+            }
+            
+            alert(
+              `Attempt ${systemCheckAttempts}/${maxAttempts}: Please verify both Webcam and Microphone before proceeding.`
+            );
+            return;
+          }
+
+          // Reset attempts on successful validation
+          systemCheckAttempts = 0;
+
+          $.ajax({
+            url: "/systemCheck",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ input: checkValue1 + ";" + checkValue2 }),
+            success: function (response) {
+              if (response.output) {
+                // Add a small delay to ensure camera is fully released
+                setTimeout(() => {
+                  window.location.href = response.output;
+                }, 500);
+              } else {
+                console.error("No output URL in response");
+                alert("System check completed but navigation failed. Please try again.");
+              }
+            },
+            error: function (xhr, status, error) {
+              console.error("AJAX request failed:", error);
+              alert("System check failed. Please try again.");
+            },
+          });
+        });
+      });
+    </script>
+  </body>
 </html>

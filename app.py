@@ -33,10 +33,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module='face_recognition
 # Allow OAuth over HTTP for local testing
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-# Global variables
-studentInfo = None
-camera = None
-profileName = None
+# Global Lock for thread safety
+lock = threading.Lock()
 
 # Flask's Application Configuration
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -49,7 +47,7 @@ app.config["MONGO_URI"] = os.environ.get("MONGO_URI")
 # Email Configuration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config['MAIL_USERNAME'])
@@ -58,6 +56,9 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.co
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    print("WARNING: Google OAuth credentials NOT set. Google login will fail.")
 
 # Initialize Client
 client = WebApplicationClient(GOOGLE_CLIENT_ID)
@@ -127,8 +128,14 @@ def capture_by_frames():
         faces = detector.detectMultiScale(gray, 1.1, 4)  # Optimized parameters
         
         # Draw rectangles around faces
+        face_count = len(faces)
         for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Reduced thickness for performance
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)  
+        
+        # Add face count overlay for feedback
+        cv2.putText(frame, f"Faces: {face_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        if face_count > 1:
+            cv2.putText(frame, "MULTIPLE PEOPLE DETECTED", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
         # Encode frame for streaming with optimized quality
         ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])  # Increased quality
@@ -144,19 +151,19 @@ def capture_by_frames():
 
 # Function to run Cheat Detection when we start the Application
 def start_loop():
-    """Start cheat detection threads on first request."""
-    # Check if threads are already running to avoid duplicate starts
-    if not hasattr(app, 'threads_started'):
-        try:
-            # Submit tasks to thread pool
-            executor.submit(utils.cheat_Detection2)
-            executor.submit(utils.cheat_Detection1)
-            executor.submit(utils.fr.run_recognition)
-            executor.submit(utils.a.record)
-            app.threads_started = True
-            print("Cheat detection threads started")
-        except Exception as e:
-            print(f"Error starting cheat detection threads: {e}")
+    """Start cheat detection threads on first request with thread safety."""
+    with lock:
+        if not getattr(app, 'threads_started', False):
+            try:
+                # Submit tasks to thread pool
+                executor.submit(utils.cheat_Detection2)
+                executor.submit(utils.cheat_Detection1)
+                executor.submit(utils.fr.run_recognition)
+                executor.submit(utils.a.record)
+                app.threads_started = True
+                print("Cheat detection threads started")
+            except Exception as e:
+                print(f"Error starting cheat detection threads: {e}")
 
 @app.route('/')
 @app.route('/main')
@@ -167,7 +174,6 @@ def main():
 @app.route('/result', methods=['POST', 'GET'])
 def result():
     """Handle exam results."""
-    global studentInfo
     if request.method == 'POST':
         result_data = request.form
         # Get suspicion log from utils
@@ -188,7 +194,7 @@ def result():
         except Exception as e:
             print(f"Error updating result: {e}")
             
-        return render_template("Results.html", result=result_data, studentInfo=studentInfo)
+        return render_template("Results.html", result=result_data, studentInfo=session.get('studentInfo'))
     
     # Handle GET request if needed
     return redirect(url_for('main'))
@@ -196,7 +202,6 @@ def result():
 @app.route('/login', methods=['POST'])
 def login():
     """Handle traditional login."""
-    global studentInfo
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
@@ -211,13 +216,14 @@ def login():
                 flash('Your Email or Password is incorrect, try again.', 'error')
                 return redirect(url_for('main'))
             
-            # Set student info
-            studentInfo = {
+            # Set student info in session instead of global
+            student_data = {
                 "Id": str(user['_id']),
                 "Name": user['Name'],
                 "Email": user['Email'],
                 "Password": user['Password']
             }
+            session['studentInfo'] = student_data
             
             # Set user in session
             session['user_id'] = str(user['_id'])
@@ -276,7 +282,6 @@ def google_login():
 @app.route('/google_login/callback')
 def google_callback():
     """Handle Google OAuth callback."""
-    global studentInfo
     
     # Check for error in callback
     error = request.args.get('error')
@@ -369,13 +374,14 @@ def google_callback():
             mongo.db.students.insert_one(new_student)
             user = mongo.db.students.find_one({"Email": users_email})
         
-        # Log them in
-        studentInfo = {
+        # Set student info in session
+        student_data = {
             "Id": str(user['_id']),
             "Name": user['Name'],
             "Email": user['Email'],
             "Password": user['Password']
         }
+        session['studentInfo'] = student_data
         
         # Set session
         session['user_id'] = str(user['_id'])
@@ -419,13 +425,8 @@ def video_capture():
 @app.route('/saveFaceInput')
 def saveFaceInput():
     """Save face input image."""
-    global profileName, studentInfo
-    
-    if 'user_id' not in session or session.get('user_role') != 'STUDENT':
-        flash('Please login as a student first.', 'error')
-        return redirect(url_for('main'))
-    
     # Session-safe studentInfo retrieval
+    studentInfo = session.get('studentInfo')
     if studentInfo is None:
         user = mongo.db.students.find_one({"_id": ObjectId(session['user_id'])})
         if user:
@@ -458,6 +459,7 @@ def saveFaceInput():
     # Generate profile name (using resultId from utils)
     res_id = utils.get_resultId()
     profileName = f"{studentInfo['Name']}_{res_id:03d}_Profile.jpg"
+    session['profileName'] = profileName
     
     # Save image locally first
     cv2.imwrite(profileName, frame)
@@ -475,7 +477,7 @@ def saveFaceInput():
 @app.route('/confirmFaceInput')
 def confirmFaceInput():
     """Confirm face input."""
-    global profileName
+    profileName = session.get('profileName')
     if 'user_id' not in session or session.get('user_role') != 'STUDENT':
         flash('Please login as a student first.', 'error')
         return redirect(url_for('main'))
@@ -489,7 +491,7 @@ def confirmFaceInput():
     
     return render_template('ExamConfirmFaceInput.html', profile=profileName)
 
-@app.route('/systemCheck')
+@app.route('/systemCheck', methods=["GET"])
 def systemCheck():
     """System check page."""
     if 'user_id' not in session or session.get('user_role') != 'STUDENT':
@@ -497,9 +499,18 @@ def systemCheck():
         return redirect(url_for('main'))
     
     # Ensure camera is released so browser can access it for system check
-    if hasattr(utils, 'cap') and utils.cap is not None:
-        utils.cap.release()
-        utils.cap = None
+    # Add more robust cleanup
+    try:
+        if hasattr(utils, 'cap') and utils.cap is not None:
+            if utils.cap.isOpened():
+                print("Releasing camera for system check...")
+                utils.cap.release()
+            utils.cap = None
+            # Give system time to fully release the camera
+            time.sleep(0.5)
+    except Exception as e:
+        print(f"Error releasing camera: {e}")
+        # Continue anyway, as the browser might still be able to access it
         
     return render_template('ExamSystemCheck.html')
 
@@ -509,11 +520,14 @@ def systemCheckRoute():
     if request.method == 'POST':
         examData = request.get_json()
         if not examData:
-            return jsonify({"output": "systemCheckError"})
+            return jsonify({"output": url_for('systemCheckError')})
         
-        output = 'exam'
+        # Add a small delay to ensure camera is fully released from browser
+        time.sleep(0.3)
+        
+        output = url_for('exam')
         if 'Not available' in examData.get('input', '').split(';'):
-            output = 'systemCheckError'
+            output = url_for('systemCheckError')
         return jsonify({"output": output})
 
 @app.route('/systemCheckError')
@@ -535,16 +549,55 @@ def exam():
     utils.stop_proctoring_flag = False
     utils.Globalflag = True
     
-    # Wait for master_frame_reader to handle camera if needed
-    # (It's already running in the background)
+    # Wait for master_frame_reader to handle camera initialization
+    # Give it more time and better feedback
+    max_wait_time = 45  # Increased from 30 to 45 seconds
     counter = 0
-    while (not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened()) and counter < 20:  # Increased timeout
-        time.sleep(0.2)  # Reduced sleep time
-        counter += 1
     
-    if not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened():
-        flash('Unable to access camera for proctoring.', 'error')
-        return redirect(url_for('systemCheck'))
+    print("Waiting for camera initialization...")
+    while (not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened()) and counter < max_wait_time:
+        time.sleep(0.2)  # Slightly increased sleep for stability
+        counter += 1
+        if counter % 10 == 0:  # Every 2 seconds
+            print(f"Still waiting for camera... ({counter}/{max_wait_time} seconds)")
+    
+    # Final check with more detailed error reporting
+    camera_ready = hasattr(utils, 'cap') and utils.cap is not None and utils.cap.isOpened()
+    
+    if not camera_ready:
+        error_msg = f"Camera failed to initialize after {max_wait_time} seconds. "
+        if hasattr(utils, 'cap'):
+            if utils.cap is None:
+                error_msg += "Camera object is None. "
+            elif not utils.cap.isOpened():
+                error_msg += "Camera is not opened. "
+                # Try to force reinitialization
+                try:
+                    if utils.cap is not None:
+                        utils.cap.release()
+                    utils.cap = None
+                    print("Attempting manual camera reinitialization...")
+                    utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                    if not utils.cap.isOpened():
+                        utils.cap = cv2.VideoCapture(0)
+                    if utils.cap.isOpened():
+                        utils.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        utils.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        utils.cap.set(cv2.CAP_PROP_FPS, 20)
+                        utils.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        camera_ready = True
+                        print("Manual camera initialization successful!")
+                except Exception as init_error:
+                    error_msg += f"Manual init failed: {str(init_error)}. "
+        else:
+            error_msg += "Camera attribute not found. "
+        
+        if not camera_ready:
+            print(f"Camera Error: {error_msg}")
+            flash(error_msg + 'Please check your camera connection and permissions.', 'error')
+            return redirect(url_for('systemCheck'))
+    
+    print("Camera is ready for exam proctoring")
     
     # Reset flags
     utils.stop_proctoring_flag = False
@@ -557,18 +610,62 @@ def exam():
     # Start proctoring logic threads
     start_loop()
     
-    # Setup keyboard hook
-    try:
-        keyboard.hook(utils.shortcut_handler)
-    except Exception as e:
-        print(f"Error setting up keyboard hook: {e}")
+    # Setup keyboard hook safely
+    if keyboard:
+        try:
+            keyboard.hook(utils.shortcut_handler)
+        except Exception as e:
+            print(f"Error setting up keyboard hook: {e}")
     
     return render_template('Exam.html')
+
+def save_exam_result(student_data, score, trust_score, status, location_data=None, session_id=None):
+    """Centralized function to save exam results to JSON and MongoDB."""
+    # Calculate final trust score (100 - deducted marks)
+    finalTrustScore = max(100 - trust_score, 0)
+    
+    # Extract location
+    lat = "Unknown"
+    lon = "Unknown"
+    if location_data:
+        lat = location_data.get('latitude', 'Unknown')
+        lon = location_data.get('longitude', 'Unknown')
+    
+    if session_id is None:
+        session_id = str(int(time.time()))
+
+    # Save result to JSON
+    result_entry = {
+        "Id": utils.get_resultId(),
+        "Name": student_data['Name'],
+        "TotalMark": score,
+        "TrustScore": finalTrustScore,
+        "Status": status,
+        "Date": time.strftime("%Y-%m-%d", time.localtime(time.time())),
+        "StId": student_data['Id'],
+        "Link": session.get('profileName', 'avatar.svg'),
+        "StartTime": time.strftime("%H:%M:%S"),
+        "Location": f"{lat}, {lon}",
+        "SessionId": session_id
+    }
+    utils.write_json(result_entry, "result.json")
+
+    # Save result to MongoDB
+    try:
+        result_id = result_entry["Id"]
+        mongo.db.results.replace_one(
+            {"Id": result_id},
+            result_entry,
+            upsert=True
+        )
+    except Exception as e:
+        print(f"Error saving result to MongoDB: {e}")
+    
+    return result_entry
 
 @app.route('/exam', methods=["POST"])
 def examAction():
     """Handle exam submission."""
-    global studentInfo
     link = ''
     if request.method == 'POST':
         examData = request.get_json()
@@ -576,7 +673,7 @@ def examAction():
             return jsonify({"output": "", "link": ""})
             
         # Session-safe studentInfo retrieval
-        current_student = studentInfo
+        current_student = session.get('studentInfo')
         if current_student is None:
             if 'user_id' in session:
                 user = mongo.db.students.find_one({"_id": ObjectId(session['user_id'])})
@@ -598,14 +695,15 @@ def examAction():
             utils.stop_proctoring()
             
             # Handle shortcuts detection
-            if hasattr(utils, 'shorcuts') and utils.shorcuts:
-                # Individual records are now handled in utils.Shortcut_record_duration
-                # We just clear the list here after processing marks
-                utils.shorcuts = []
+            if hasattr(utils, 'shortcuts') and utils.shortcuts:
+                utils.shortcuts = []
+            
+            # Reset thread status flag to allow restart in next session
+            with lock:
+                app.threads_started = False
             
             # Calculate scores
             trustScore = utils.get_TrustScore(utils.get_resultId())
-            
             try:
                 exam_score = float(examData.get('input', 0))
                 totalMark = math.floor(exam_score * 6.6667)
@@ -624,39 +722,17 @@ def examAction():
                     status = "Pass"
                     link = 'showResultPass'
             
-            # Extract location and sessionId
-            location = examData.get('location', {})
-            lat = location.get('latitude', 'Unknown')
-            lon = location.get('longitude', 'Unknown')
-            sessionId = examData.get('sessionId', 'Unknown')
-
-            # Save result to JSON
-            result_entry = {
-                "Id": utils.get_resultId(),
-                "Name": current_student['Name'],
-                "TotalMark": totalMark,
-                "TrustScore": max(100 - trustScore, 0),
-                "Status": status,
-                "Date": time.strftime("%Y-%m-%d", time.localtime(time.time())),
-                "StId": current_student['Id'],
-                "Link": profileName if profileName else 'avatar.svg',
-                "StartTime": time.strftime("%H:%M:%S"),
-                "Location": f"{lat}, {lon}",
-                "SessionId": sessionId
-            }
-            utils.write_json(result_entry, "result.json")
-
-            # Save result to MongoDB
-            try:
-                mongo.db.results.update_one(
-                    {"Id": result_entry["Id"]},
-                    {"$set": result_entry},
-                    upsert=True
-                )
-            except Exception as e:
-                print(f"Error saving result to MongoDB: {e}")
+            # Save using centralized function
+            result_entry = save_exam_result(
+                student_data=current_student,
+                score=totalMark,
+                trust_score=trustScore,
+                status=status,
+                location_data=examData.get('location'),
+                session_id=examData.get('sessionId')
+            )
             
-            resultStatus = f"{current_student['Name']};{totalMark};{status};{time.strftime('%Y-%m-%d', time.localtime(time.time()))}"
+            resultStatus = f"{current_student['Name']};{totalMark};{status};{result_entry['Date']}"
         else:
             utils.Globalflag = True
             print('Exam started or empty submission')
@@ -754,16 +830,22 @@ def report_violation():
     utils.write_json(violation_entry, 'violation.json')
     
     # Graduated enforcement logic
-    if violation_type == "Fullscreen Exit":
-        if count >= 2:
-            utils.terminate_exam(violation_type)
-            return jsonify({"success": True, "action": "terminated"})
-        else:
-            return jsonify({"success": True, "action": "warning", "message": "First warning: Fullscreen is mandatory. Next exit will terminate your exam."})
-    
-    # Critical violations (like phone detection) trigger immediate termination
-    if violation_type in ["Mobile Phone Detected", "Electronic Device"]:
+    # Critical violations (like phone detection) trigger termination
+    if violation_type in ["Mobile Phone Detected", "Electronic Device"] or (violation_type == "Fullscreen Exit" and count >= 2):
         utils.terminate_exam(violation_type)
+        
+        # Log result as Fail(Cheating)
+        current_student = session.get('studentInfo')
+        if current_student:
+            trustScore = utils.get_TrustScore(utils.get_resultId())
+            save_exam_result(
+                student_data=current_student,
+                score=0,
+                trust_score=trustScore,
+                status="Fail(Cheating)",
+                session_id=data.get('sessionId')
+            )
+            
         return jsonify({"success": True, "action": "terminated"})
         
     return jsonify({"success": True, "action": "logged"})
@@ -797,7 +879,20 @@ def check_person_status():
                     ret, frame = utils.cap.read()
                     if ret:
                         evidence_frame = frame
-                utils.terminate_exam("No participant detected in camera feed - Countdown expired", evidence_frame)
+                
+                violation_text = "No participant detected in camera feed - Countdown expired"
+                utils.terminate_exam(violation_text, evidence_frame)
+                
+                # Log result
+                current_student = session.get('studentInfo')
+                if current_student:
+                    trustScore = utils.get_TrustScore(utils.get_resultId())
+                    save_exam_result(
+                        student_data=current_student,
+                        score=0,
+                        trust_score=trustScore,
+                        status="Fail(Cheating)"
+                    )
             return jsonify({"status": "terminated", "warning": True})
             
     return jsonify({"status": "ok", "warning": False})
@@ -1051,6 +1146,22 @@ def exam_terminated():
     """Exam terminated page."""
     violation_type = utils.exam_status.get('violation_type', 'Unknown Violation')
     evidence_image = utils.exam_status.get('evidence_image', '')
+    
+    # Final safety: Ensure result is logged if not already done
+    current_student = session.get('studentInfo')
+    if current_student:
+        trustScore = utils.get_TrustScore(utils.get_resultId())
+        save_exam_result(
+            student_data=current_student,
+            score=0,
+            trust_score=trustScore,
+            status="Fail(Cheating)"
+        )
+        # Stop proctoring if it hasn't stopped
+        utils.stop_proctoring()
+        with lock:
+            app.threads_started = False
+
     return render_template('ExamTerminated.html', violation_type=violation_type, evidence_image=evidence_image)
 
 @app.route('/check_exam_status', methods=['GET'])
@@ -1143,13 +1254,19 @@ def initialize_database():
 
 @app.errorhandler(404)
 def page_not_found(e):
-    """Handle 404 errors."""
-    return render_template('404.html'), 404
+    """Handle 404 errors safely."""
+    try:
+        return render_template('404.html'), 404
+    except:
+        return "404 Not Found", 404
 
 @app.errorhandler(500)
 def internal_server_error(e):
-    """Handle 500 errors."""
-    return render_template('500.html'), 500
+    """Handle 500 errors safely."""
+    try:
+        return render_template('500.html'), 500
+    except:
+        return "Internal Server Error", 500
 
 if __name__ == '__main__':
     # Initialize database

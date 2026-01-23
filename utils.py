@@ -58,6 +58,7 @@ stop_proctoring_flag = False
 Student_Name = ''
 shortcut_flag = False
 shortcut_event_name = ""
+shortcuts = [] # List to store detected shortcuts during session
 exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
 violation_counts = {} # Tracks counts of specific violations per session
 no_person_status = {'detected': True, 'start_time': None}
@@ -234,65 +235,116 @@ def get_cascade_path():
 face_cascade = cv2.CascadeClassifier(get_cascade_path())
 
 def master_frame_reader():
-    """Centralized thread to read frames from camera and share with other threads."""
+    """Centralized perpetual thread to read frames from camera when needed."""
     global global_frame, cap, Globalflag, stop_proctoring_flag
-    print("Master Frame Reader thread started")
-    while not stop_proctoring_flag:
-        # Auto-initialize if missing
-        # CRITICAL: Check flag AGAIN before opening to prevent race condition where stop_proctoring closes it 
-        # and we immediately re-open it before exiting loop.
-        if stop_proctoring_flag: 
-            break
+    print("Master Frame Reader thread started (Persistent)")
+    
+    while True:
+        # If proctoring is stopped, release camera and wait
+        if stop_proctoring_flag:
+            if cap is not None and cap.isOpened():
+                print("Master Reader: Proctoring stopped, releasing camera...")
+                cap.release()
+                cap = None
+            time.sleep(0.5)
+            continue
 
+        # Auto-initialize camera if proctoring is active but camera is closed
         if cap is None or not cap.isOpened():
             try:
                 print("Master Reader: Opening Camera...")
-                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                # Try multiple backends for better compatibility
+                backends = [
+                    cv2.CAP_DSHOW,      # DirectShow (Windows)
+                    cv2.CAP_MSMF,       # Media Foundation (Windows)
+                    -1,                 # Auto-detect
+                    cv2.CAP_ANY         # Any available backend
+                ]
                 
-                # Optimize camera settings for better performance
-                if not cap.isOpened():
-                    # Fallback to default index if 0 fails with DSHOW
-                    cap = cv2.VideoCapture(0)
+                cap_opened = False
+                for backend in backends:
+                    if backend == -1:
+                        cap = cv2.VideoCapture(0)  # Default backend
+                    else:
+                        cap = cv2.VideoCapture(0, backend)
+                    
+                    if cap.isOpened():
+                        # Test if we can actually read a frame
+                        for _ in range(5):  # Try reading 5 frames
+                            success, _ = cap.read()
+                            if success:
+                                cap_opened = True
+                                break
+                            time.sleep(0.1)
+                        
+                        if cap_opened:
+                            break
+                        else:
+                            cap.release()
+                            cap = None
+                    else:
+                        cap = None
                 
-                if not cap.isOpened():
-                    print("Master Reader: Failed to open camera, retrying...")
-                    time.sleep(1)
+                if not cap_opened:
+                    print("Master Reader: Failed to open camera with any backend, retrying in 2s...")
+                    # List available backends for debugging
+                    try:
+                        backends_list = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+                        print("Available OpenCV backends:")
+                        for backend in backends_list:
+                            try:
+                                test_cap = cv2.VideoCapture(0, backend)
+                                if test_cap.isOpened():
+                                    print(f"  ✓ Backend {backend} works")
+                                    test_cap.release()
+                                else:
+                                    print(f"  ✗ Backend {backend} failed")
+                            except Exception as be:
+                                print(f"  ✗ Backend {backend} error: {be}")
+                    except Exception as debug_error:
+                        print(f"Debug error: {debug_error}")
+                    time.sleep(2)
                     continue
                 else:
-                    # Optimize camera settings for better performance
+                    # Optimize camera settings
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                     cap.set(cv2.CAP_PROP_FPS, 20)
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize lag
-                    print("Master Reader: Camera opened and optimized.")
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    # Additional optimizations
+                    cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus if supported
+                    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
+                    print(f"Master Reader: Camera opened successfully with backend {cap.getBackendName()}")
             except Exception as e:
                 print(f"Master Reader: Error opening camera: {e}")
-                time.sleep(1)
+                time.sleep(2)
                 continue
 
-        if cap is not None and cap.isOpened():
-            try:
-                success, frame = cap.read()
-                if success:
-                    # Only update frame if it's a new frame to avoid unnecessary copying
-                    with frame_lock:
-                        global_frame = frame  # Direct assignment to reduce copy overhead
-                else:
-                    print("Master Frame Reader: Failed to read frame from camera")
-                    time.sleep(0.01)
-            except Exception as e:
-                print(f"Error in master_frame_reader: {e}")
+        # Read frames while camera is open and proctoring is NOT stopped
+        try:
+            success, frame = cap.read()
+            if success:
+                with frame_lock:
+                    global_frame = frame
+            else:
+                print("Master Frame Reader: Failed to read frame")
                 time.sleep(0.01)
-        else:
-            # Idle for a bit if camera not active
-            time.sleep(0.1)
-    print("Master Frame Reader thread stopped")
+        except Exception as e:
+            print(f"Error in master_frame_reader loop: {e}")
+            time.sleep(0.01)
+    
+    print("Master Frame Reader thread stopped (Unexpectedly)")
 
 def get_frame():
     """Retrieve the latest frame from the shared buffer."""
     global global_frame
     with frame_lock:
-        return global_frame.copy() if global_frame is not None else None
+        frame = global_frame.copy() if global_frame is not None else None
+        # Add debugging for camera issues
+        if frame is None and hasattr(cap, 'isOpened') and cap is not None:
+            if not cap.isOpened():
+                print("DEBUG: Camera is closed in get_frame()")
+        return frame
 
 
 def get_optimized_frame():
@@ -306,6 +358,30 @@ def get_optimized_frame():
                 return cv2.resize(global_frame, (640, 480))
             return global_frame.copy()
         return None
+
+
+def check_camera_health():
+    """Check if camera is functioning properly."""
+    global cap
+    try:
+        if cap is None:
+            return False, "Camera object is None"
+        if not cap.isOpened():
+            return False, "Camera is not opened"
+        
+        # Try to read a frame
+        success, frame = cap.read()
+        if not success or frame is None:
+            return False, "Cannot read frame from camera"
+        
+        # Check frame dimensions
+        height, width = frame.shape[:2]
+        if width < 100 or height < 100:  # Suspiciously small frame
+            return False, f"Frame size too small: {width}x{height}"
+        
+        return True, f"Camera OK: {width}x{height}"
+    except Exception as e:
+        return False, f"Camera error: {str(e)}"
 
 
 #Database and Files Related
@@ -541,13 +617,18 @@ def Head_record_duration(text,img):
 #Recording Function for More than one person Detection
 def MTOP_record_duration(text, img):
     global start_time, end_time, recorded_durations, prev_state, flag, writer, width, height
-    print("Running MTOP Recording Function")
-    print(text)
-    if text != 'Only one person is detected' and prev_state[2] == 'Only one person is detected':
+    print(f"Running MTOP Recording Function - Current: {text}, Prev: {prev_state[2]}")
+    
+    # Only treat "More than one person detected." as a serious violation here
+    is_mtop = (text == 'More than one person detected.')
+    was_mtop = (prev_state[2] == 'More than one person detected.')
+    
+    if is_mtop and not was_mtop:
+        # Just started seeing multiple people
         start_time[2] = time.time()
         for _ in range(2):
             writer[2].write(img)
-    elif text != 'Only one person is detected' and str(text) == prev_state[2] and (time.time() - start_time[2]) > 3:
+    elif is_mtop and was_mtop and (time.time() - start_time[2]) > 2: # Reduced to 2s for faster response
         flag[2] = True
         for _ in range(2):
             writer[2].write(img)
@@ -564,12 +645,12 @@ def MTOP_record_duration(text, img):
             move_file_to_output_folder(img_filename, 'Violations')
             
             MTOPViolation = {
-                "Name": prev_state[2],
+                "Name": "Multiple People Detected",
                 "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[2])),
                 "Duration": str(duration) + " seconds",
-                "Mark": math.floor(1.5 * duration),
+                "Mark": math.floor(2 * duration), # Increased penalty
                 "Link": outputVideo,
-                "Image": img_filename, # Added Image field
+                "Image": img_filename,
                 "RId": get_resultId()
             }
             recorded_durations.append(MTOPViolation)
@@ -583,18 +664,21 @@ def MTOP_record_duration(text, img):
             writer[2] = cv2.VideoWriter(video[2], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height))
             flag[2] = False
 
-    elif text != 'Only one person is detected' and str(text) == prev_state[2] and (time.time() - start_time[2]) <= 3:
+    elif is_mtop and was_mtop:
+        # Continuing to see multiple people but within grace period
         flag[2] = False
         for _ in range(2):
             writer[2].write(img)
     else:
-        if prev_state[2] != "Only one person is detected" and not stop_proctoring_flag:
+        # Not seeing multiple people anymore
+        if was_mtop and not stop_proctoring_flag:
             writer[2].release()
             end_time[2] = time.time()
             os.remove(video[2])
             video[2] = str(random.randint(1, 50000)) + ".mp4"
             writer[2] = cv2.VideoWriter(video[2], cv2.VideoWriter_fourcc(*'mp4v'), 20, (width,height))
             flag[2] = False
+    
     prev_state[2] = text
 
 def Shortcut_record_duration(text, img):
@@ -1029,42 +1113,50 @@ def headMovmentDetection(image, face_mesh):
 #Third : More than one person Detection Function
 def MTOP_Detection(img):
     print("Running MTOP Function")
-    textMTOP = ''
+    textMTOP = 'Only one person is detected' # Default
     
     if faceDetection is not None:
         # Use MediaPipe if available
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = faceDetection.process(imgRGB)
+        face_count = 0
         if results.detections:
+            face_count = len(results.detections)
             for id, detection in enumerate(results.detections):
                 bboxC = detection.location_data.relative_bounding_box
                 ih, iw, ic = img.shape
                 bbox = int(bboxC.xmin * iw), int(bboxC.ymin * ih), \
                     int(bboxC.width * iw), int(bboxC.height * ih)
-                # Drawing the recantangle
+                # Drawing the rectangle
                 cv2.rectangle(img, bbox, (255, 0, 255), 2)
-                # cv2.putText(img, f'{int(detection.score[0] * 100)}%', (bbox[0], bbox[1] - 20), cv2.FONT_HERSHEY_PLAIN, 3, (255, 255, 255), 10)
-            if id > 0:
+            
+            if face_count > 1:
                 textMTOP = "More than one person detected."
             else:
                 textMTOP = "Only one person is detected"
         else:
-            textMTOP="Only one person is detected"
+            # No face detected by MediaPipe
+            textMTOP = "No face detected"
     else:
         # Fallback to OpenCV Haar Cascade
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        face_count = len(faces)
         
-        if len(faces) > 1:
+        if face_count > 1:
             textMTOP = "More than one person detected."
-        elif len(faces) == 1:
+        elif face_count == 1:
             textMTOP = "Only one person is detected"
         else:
-            textMTOP = "Only one person is detected"
+            textMTOP = "No face detected"
         
         for (x, y, w, h) in faces:
             cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 255), 2)
+    
+    # Optional: If no face detected, we don't necessarily want to trigger MTOP violation
+    # unless we want to treat 'No face' as a violation here too.
+    # But usually absence is handled by check_person_status.
+    # For MTOP, we only care if face_count > 1.
     
     MTOP_record_duration(textMTOP, img)
     print(textMTOP)
@@ -1149,7 +1241,7 @@ def shortcut_handler(event):
             print("Ctrl+Z shortcut detected!")
         
         if shortcut != "":
-            shorcuts.append(shortcut)
+            shortcuts.append(shortcut) # Corrected typo from shorcuts to shortcuts
             global shortcut_flag, shortcut_event_name
             shortcut_flag = True
             shortcut_event_name = shortcut
@@ -1184,9 +1276,8 @@ def electronicDevicesDetection(frame):
     textED = "No Electronic Device Detected"
     
     try:
-        # Predict on image with lower confidence threshold for better detection
-        # Lowered to 0.25 based on user feedback
-        detect_params = model.predict(source=[frame], conf=0.20, save=False, verbose=False)  # Slightly lowered confidence for better sensitivity
+        # Predict on image with optimized confidence threshold
+        detect_params = model.predict(source=[frame], conf=0.25, save=False, verbose=False)  
         
         for result in detect_params:  # iterate results
             boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
@@ -1210,7 +1301,7 @@ def electronicDevicesDetection(frame):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                     
                     # TERMINATE EXAM IMMEDIATELY IF MOBILE PHONE IS DETECTED
-                    if detected_obj == 'cell phone':
+                    if detected_obj == 'cell phone' and confidence > 0.30:
                         print(f"📱 MOBILE PHONE DETECTED - TERMINATING EXAM IMMEDIATELY")
                         # Save violation evidence image
                         img_filename = f"mobile_phone_violation_{int(time.time())}.jpg"
