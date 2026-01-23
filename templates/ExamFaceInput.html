@@ -37,8 +37,20 @@
       </section>
 
       <section class="table__body">
-        <div>
-          <img src="{{ url_for('video_capture') }}" class="host-img" alt="Camera Feed">
+        <div id="cameraSection" style="display:block;">
+          <video id="localVideo" class="host-img" autoplay playsinline muted></video>
+          <canvas id="captureCanvas" style="display:none;"></canvas>
+        </div>
+        <div id="cameraControls" style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+          <label for="deviceSelect" style="color:#fff;">Camera:</label>
+          <select id="deviceSelect" style="min-width:220px; padding:6px; border-radius:6px;"></select>
+          <button id="retryBtn" class="next" style="padding:6px 12px;">Retry</button>
+        </div>
+
+        <div id="uploadSection" style="margin-top:20px; padding:20px; border:2px dashed #666; border-radius:8px; text-align:center; display:none;">
+          <p style="color:#fff; margin-bottom:10px;"><strong>Camera unavailable?</strong> Upload a photo instead:</p>
+          <input type="file" id="photoUpload" accept="image/*" style="padding:8px; color:#fff;">
+          <button id="uploadBtn" class="next" style="margin-top:10px; padding:8px 16px;">Upload Photo</button>
         </div>
       </section>
 
@@ -47,9 +59,282 @@
         before capturing.
       </p>
 
-      <a href="{{ url_for('saveFaceInput') }}" class="next">
+      <button id="captureBtn" class="next" disabled style="opacity: 0.6;">
         Capture & Save <i class='bx bx-camera'></i>
-      </a>
+      </button>
+
+      <script>
+        const video = document.getElementById('localVideo');
+        const canvas = document.getElementById('captureCanvas');
+        const btn = document.getElementById('captureBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const photoUpload = document.getElementById('photoUpload');
+        let cameraAvailable = false;
+
+        async function tryGetUserMedia(constraints) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            return stream;
+          } catch (e) {
+            throw e;
+          }
+        }
+
+        async function waitForVideoReady(videoElement, timeout = 5000) {
+          return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+            
+            const checkReady = () => {
+              if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                resolve();
+              } else if (Date.now() - startTime > timeout) {
+                reject(new Error('Video element did not become ready in time'));
+              } else {
+                requestAnimationFrame(checkReady);
+              }
+            };
+            
+            if (videoElement.srcObject) {
+              checkReady();
+            } else {
+              reject(new Error('Video source not set'));
+            }
+          });
+        }
+
+        async function initCamera() {
+          try {
+            await populateDeviceList();
+            const selected = document.getElementById('deviceSelect').value;
+            await startStream(selected || null);
+            cameraAvailable = true;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            console.log('Camera initialized successfully');
+          } catch (err) {
+            console.error('initCamera error:', err.message || err);
+            cameraAvailable = false;
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+            document.getElementById('uploadSection').style.display = 'block';
+            const msg = `Camera unavailable: ${err && err.message ? err.message : err}.\n\nOptions:\n1. Select a different camera from the dropdown and click Retry\n2. Upload a photo instead\n3. Close Zoom, Teams, or other camera apps and refresh`;
+            alert(msg);
+          }
+        }
+
+        async function populateDeviceList() {
+          const sel = document.getElementById('deviceSelect');
+          sel.innerHTML = '';
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cams = devices.filter(d => d.kind === 'videoinput');
+            console.log('Found cameras:', cams.length);
+            
+            if (cams.length === 0) {
+              const opt = document.createElement('option');
+              opt.value = '';
+              opt.text = 'No camera found';
+              sel.appendChild(opt);
+              return;
+            }
+            
+            cams.forEach((dev, idx) => {
+              const opt = document.createElement('option');
+              opt.value = dev.deviceId;
+              opt.text = (dev.label && dev.label.trim()) ? dev.label : `Camera ${idx + 1}`;
+              sel.appendChild(opt);
+            });
+          } catch (e) {
+            console.error('populateDeviceList failed:', e);
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.text = 'Unable to list cameras';
+            sel.appendChild(opt);
+          }
+        }
+
+        async function startStream(deviceId) {
+          try {
+            // Stop any existing tracks first
+            if (video.srcObject) {
+              video.srcObject.getTracks().forEach(t => {
+                try {
+                  t.stop();
+                } catch (e) {
+                  console.warn('Error stopping track:', e);
+                }
+              });
+              video.srcObject = null;
+            }
+            
+            // Wait for tracks to fully release
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Request camera
+            const constraints = deviceId 
+              ? { 
+                  video: { 
+                    deviceId: { exact: deviceId }, 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 } 
+                  }, 
+                  audio: false 
+                } 
+              : { 
+                  video: { 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 } 
+                  }, 
+                  audio: false 
+                };
+            
+            console.log('Requesting camera with constraints:', constraints);
+            const stream = await tryGetUserMedia(constraints);
+            video.srcObject = stream;
+            
+            // Wait for video to load metadata
+            await waitForVideoReady(video);
+            
+            console.log('Stream started successfully. Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+            cameraAvailable = true;
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            document.getElementById('uploadSection').style.display = 'none';
+          } catch (e) {
+            console.error('startStream failed:', e.message || e);
+            cameraAvailable = false;
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+            document.getElementById('uploadSection').style.display = 'block';
+            throw e;
+          }
+        }
+
+        btn.addEventListener('click', async function (e) {
+          e.preventDefault();
+          if (!cameraAvailable || !video.srcObject) {
+            alert('Camera not initialized. Please upload a photo or select another camera.');
+            return;
+          }
+          
+          if (video.videoWidth === 0 || video.videoHeight === 0) {
+            alert('Camera is not ready. Please wait a moment and try again.');
+            return;
+          }
+          
+          try {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataURL = canvas.toDataURL('image/jpeg', 0.85);
+            
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+            
+            const res = await fetch('{{ url_for('saveFaceInput') }}', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: dataURL })
+            });
+            
+            const j = await res.json();
+            if (j.success) {
+              window.location.href = '{{ url_for('confirmFaceInput') }}';
+            } else {
+              alert(j.error || 'Failed to save image');
+              btn.disabled = false;
+              btn.textContent = 'Capture & Save';
+            }
+          } catch (err) {
+            console.error('Error capturing/uploading:', err);
+            alert('Error: ' + (err.message || err));
+            btn.disabled = false;
+            btn.textContent = 'Capture & Save';
+          }
+        });
+
+        uploadBtn.addEventListener('click', async function (e) {
+          e.preventDefault();
+          const file = photoUpload.files[0];
+          if (!file) {
+            alert('Please select a photo');
+            return;
+          }
+          
+          try {
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            
+            const reader = new FileReader();
+            reader.onerror = function() {
+              alert('Error reading file. Please try again.');
+              uploadBtn.disabled = false;
+              uploadBtn.textContent = 'Upload Photo';
+            };
+            reader.onload = async function (ev) {
+              const dataURL = ev.target.result;
+              try {
+                const res = await fetch('{{ url_for('saveFaceInput') }}', {
+                  method: 'POST',
+                  credentials: 'same-origin',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ image: dataURL })
+                });
+                const j = await res.json();
+                if (j.success) {
+                  window.location.href = '{{ url_for('confirmFaceInput') }}';
+                } else {
+                  alert(j.error || 'Failed to save image');
+                  uploadBtn.disabled = false;
+                  uploadBtn.textContent = 'Upload Photo';
+                }
+              } catch (err) {
+                console.error('Error uploading:', err);
+                alert('Upload failed: ' + (err.message || err));
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Photo';
+              }
+            };
+            reader.readAsDataURL(file);
+          } catch (err) {
+            console.error('Error preparing upload:', err);
+            alert('Error: ' + (err.message || err));
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload Photo';
+          }
+        });
+
+        document.getElementById('retryBtn').addEventListener('click', async function (ev) {
+          ev.preventDefault();
+          const sel = document.getElementById('deviceSelect');
+          const deviceId = sel.value || null;
+          try {
+            await startStream(deviceId);
+            console.log('Retry successful');
+          } catch (e) {
+            console.error('Retry failed:', e);
+            alert('Retry failed: ' + (e && e.message ? e.message : e) + '\n\nTry uploading a photo instead.');
+          }
+        });
+
+        // Initialize camera when page loads
+        window.addEventListener('load', initCamera);
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+          if (video.srcObject) {
+            video.srcObject.getTracks().forEach(t => {
+              try {
+                t.stop();
+              } catch (e) {
+                console.warn('Error stopping track on unload:', e);
+              }
+            });
+          }
+        });
+      </script>
     </main>
   </div>
 

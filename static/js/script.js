@@ -494,6 +494,9 @@ function startPersonDetectionPolling() {
                 console.error("Failed to check person status:", error);
             }
         });
+        
+        // ALSO Check for violations from cheat detection
+        checkExamViolations();
     }, 1000);
 }
 
@@ -897,3 +900,32 @@ $(document).ready(function () {
         });
     });
 });
+
+// Periodically fetch violations and handle termination
+function checkExamViolations() {
+    $.ajax({
+        type: "GET",
+        url: "/api/check_violations",
+        success: function (resp) {
+            if (resp && resp.exam_terminated) {
+                // Redirect to termination page with a small delay to allow UI updates
+                setTimeout(() => { window.location.href = '/exam_terminated'; }, 200);
+            } else if (resp && resp.violations && resp.violations.length) {
+                // Show a persistent toast for violations
+                const latest = resp.violations[resp.violations.length - 1];
+                showPersistentToast('violation-warning', `${latest.type} detected (${latest.count})`, 'warning');
+            } else {
+                removePersistentToast('violation-warning');
+            }
+        },
+        error: function () { /* ignore */ }
+    });
+}
+
+// Ensure violation polling runs while the quiz is active
+setInterval(function () {
+    // Only poll when quiz has started
+    if (typeof secondsLeft !== 'undefined' && secondsLeft > 0) {
+        checkExamViolations();
+    }
+}, 2000);

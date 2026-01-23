@@ -50,6 +50,7 @@ import webbrowser
 from ultralytics import YOLO
 import struct
 import wave
+import atexit
 
 #Variables
 #All Related
@@ -63,6 +64,7 @@ exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
 violation_counts = {} # Tracks counts of specific violations per session
 no_person_status = {'detected': True, 'start_time': None}
 extension_heartbeat_time = 0
+mongo = None  # MongoDB reference - will be set from app.py
 
 
 # Result ID Initialization
@@ -82,13 +84,31 @@ resultId = fetch_last_id() + 1
 # Track current active result ID during exam
 current_exam_result_id = None
 
+def close_camera():
+    """Release the global camera if it's open."""
+    global cap
+    try:
+        if cap is not None:
+            try:
+                if cap.isOpened():
+                    cap.release()
+            except Exception:
+                # some backends raise on isOpened; attempt release anyway
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+            cap = None
+            print("Camera released by close_camera()")
+    except Exception as e:
+        print(f"Error releasing camera: {e}")
+
 def stop_proctoring():
     global stop_proctoring_flag, Globalflag, cap
     print("Stopping proctoring...")
     stop_proctoring_flag = True
     Globalflag = False
-    if cap is not None and cap.isOpened():
-        cap.release()
+    close_camera()
 
 def terminate_exam(violation_type, frame=None):
     global stop_proctoring_flag, Globalflag, exam_status, cap
@@ -120,6 +140,93 @@ def terminate_exam(violation_type, frame=None):
     if cap is not None:
         cap.release()
         cap = None # Ensure it's cleared
+
+def trigger_violation(v_type, img, details="", risk_level="Low"):
+    """
+    Handle violation logic: 
+    - Log with Risk Level (Low, Medium, High)
+    - 2nd occurrence of High/Medium risk may terminate exam
+    """
+    global violation_counts, exam_status, mongo, current_exam_result_id
+    
+    violation_counts[v_type] = violation_counts.get(v_type, 0) + 1
+    count = violation_counts[v_type]
+    
+    # Save violation evidence image for EVERY detection
+    img_filename = None
+    if img is not None:
+        timestamp = int(time.time())
+        img_filename = f"{v_type.lower().replace(' ', '_')}_{timestamp}.jpg"
+        # Save in current working directory before moving to static/Violations
+        cv2.imwrite(os.path.join(os.getcwd(), img_filename), img)
+        try:
+            move_file_to_output_folder(img_filename, 'Violations')
+        except Exception as e:
+            print(f"Error moving evidence image: {e}")
+
+    # Log to violation.json with Risk Level
+    violation_entry = {
+        "Name": v_type,
+        "Time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "Duration": "N/A",
+        "Mark": 10 if risk_level == "Low" else (50 if risk_level == "Medium" else 100),
+        "Link": f"{details} (Count: {count})",
+        "Image": img_filename,
+        "RiskLevel": risk_level,
+        "RId": get_resultId()
+    }
+    write_json(violation_entry, 'violation.json')
+    
+    # Save to MongoDB
+    save_violation_to_mongodb(v_type, details, risk_level, img_filename)
+    
+    print(f">>> {risk_level.upper()} RISK VIOLATION: {v_type} (Count: {count})")
+    
+    # Termination logic based on risk and count
+    if risk_level == "High":
+        if count >= 2 or v_type in ["Mobile Phone Detected", "Multiple People Detected", "Verified Student disappeared"]:
+            print(f">>> IMMEDIATE TERMINATION FOR HIGH RISK: {v_type}")
+            terminate_exam(v_type, img)
+            return True
+    
+    if count == 1:
+        msg = f"⚠️ WARNING ({risk_level} Risk): {v_type} Detected! Further violations will lead to termination."
+        exam_status['warning_message'] = msg
+        return False
+    elif count >= 3 and risk_level == "Medium":
+        print(f">>> TERMINATING FOR REPEATED MEDIUM RISK: {v_type}")
+        terminate_exam(v_type, img)
+        return True
+        
+    return False
+
+def save_violation_to_mongodb(violation_type, details="", risk_level="Low", image_path=""):
+    """
+    Save violation to MongoDB for persistent logging and admin review.
+    """
+    global mongo, current_exam_result_id
+    try:
+        if mongo is None:
+            print("Warning: MongoDB not available for violation logging")
+            return False
+        
+        violation_record = {
+            "violation_type": violation_type,
+            "details": details,
+            "risk_level": risk_level,
+            "timestamp": datetime.datetime.utcnow(),
+            "result_id": current_exam_result_id,
+            "image_path": image_path,
+            "student_name": Student_Name
+        }
+        
+        # Insert into violations collection
+        result = mongo.db.violations.insert_one(violation_record)
+        print(f"✅ Violation logged to MongoDB: {violation_type} (ID: {result.inserted_id})")
+        return True
+    except Exception as e:
+        print(f"❌ Error saving violation to MongoDB: {e}")
+        return False
 
 start_time = [0, 0, 0, 0, 0]
 end_time = [0, 0, 0, 0, 0]
@@ -616,7 +723,7 @@ def Head_record_duration(text,img):
 
 #Recording Function for More than one person Detection
 def MTOP_record_duration(text, img):
-    global start_time, end_time, recorded_durations, prev_state, flag, writer, width, height
+    global start_time, end_time, recorded_durations, prev_state, flag, writer, width, height, exam_status
     print(f"Running MTOP Recording Function - Current: {text}, Prev: {prev_state[2]}")
     
     # Only treat "More than one person detected." as a serious violation here
@@ -624,17 +731,22 @@ def MTOP_record_duration(text, img):
     was_mtop = (prev_state[2] == 'More than one person detected.')
     
     if is_mtop and not was_mtop:
-        # Just started seeing multiple people
+        # Just started seeing multiple people - use trigger_violation for better handling
+        print("🚨 MULTIPLE PEOPLE DETECTED - INITIATING VIOLATION LOG")
         start_time[2] = time.time()
         for _ in range(2):
             writer[2].write(img)
-    elif is_mtop and was_mtop and (time.time() - start_time[2]) > 2: # Reduced to 2s for faster response
+        # Log first detection as a violation
+        trigger_violation("Multiple People Detected", img, "More than one face detected in camera feed.", "High")
+        
+    elif is_mtop and was_mtop and (time.time() - start_time[2]) > 0.5: # Very short grace period
         flag[2] = True
         for _ in range(2):
             writer[2].write(img)
             
-        # Immediate Termination
-        if not stop_proctoring_flag:
+        # Immediate Termination for Multiple People (ZERO TOLERANCE)
+        if not stop_proctoring_flag and not exam_status.get('terminated', False):
+            print("🚨 MULTIPLE PEOPLE DETECTED - IMMEDIATE TERMINATION")
             writer[2].release()
             end_time[2] = time.time()
             duration = math.ceil((end_time[2] - start_time[2])/3)
@@ -648,16 +760,22 @@ def MTOP_record_duration(text, img):
                 "Name": "Multiple People Detected",
                 "Time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time[2])),
                 "Duration": str(duration) + " seconds",
-                "Mark": math.floor(2 * duration), # Increased penalty
+                "Mark": 100,  # Maximum penalty for multiple people
                 "Link": outputVideo,
                 "Image": img_filename,
                 "RId": get_resultId()
             }
             recorded_durations.append(MTOPViolation)
             write_json(MTOPViolation)
-            reduceBitRate(video[2], outputVideo)
-            move_file_to_output_folder(outputVideo)
-            terminate_exam(MTOPViolation["Name"], img)
+            try:
+                reduceBitRate(video[2], outputVideo)
+                move_file_to_output_folder(outputVideo)
+            except:
+                pass
+            
+            # Terminate exam with high risk violation
+            terminate_exam("Multiple People Detected", img)
+            exam_status['terminated'] = True
             
             os.remove(video[2])
             video[2] = str(random.randint(1, 50000)) + ".mp4"
@@ -867,14 +985,15 @@ def deleteTrashVideos():
 #Models Related
 #One: Face Detection Function
 def face_confidence(face_distance, face_match_threshold=0.6):
+    """Return numeric confidence percentage (float) for a face distance."""
     range = (1.0 - face_match_threshold)
     linear_val = (1.0 - face_distance) / (range * 2.0)
 
     if face_distance > face_match_threshold:
-        return str(round(linear_val * 100, 2)) + '%'
+        return round(linear_val * 100, 2)
     else:
         value = (linear_val + ((1.0 - linear_val) * math.pow((linear_val - 0.5) * 2, 0.2))) * 100
-        return str(round(value, 2)) + '%'
+        return round(value, 2)
 
 class FaceRecognition:
     face_locations = []
@@ -931,6 +1050,9 @@ class FaceRecognition:
         #video_capture = cv2.VideoCapture(0)
         print(f'Face Detection Flag is {Globalflag}')
         text = ""
+        verified_student_absent_start = None
+        absence_threshold = 15  # Terminate after 15 seconds of absence
+        
         if not cap.isOpened():
             sys.exit('Video source not found...')
     
@@ -960,37 +1082,68 @@ class FaceRecognition:
                     # See if the face is a match for the known face(s)
                     matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
                     name = "Unknown"
-                    confidence = '???'
+                    confidence = 0.0
     
                     # Calculate the shortest distance to face
                     face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
     
-                    best_match_index = np.argmin(face_distances)
-                    if matches[best_match_index]:
-                        tempname = str(self.known_face_names[best_match_index]).split('_')[0]
-                        tempconfidence = face_confidence(face_distances[best_match_index])
-                        if tempname == Student_Name and float(tempconfidence[:-1]) >= 84:
-                            name = tempname
-                            confidence = tempconfidence
+                    if len(face_distances) > 0:
+                        best_match_index = np.argmin(face_distances)
+                        if matches[best_match_index]:
+                            tempname = str(self.known_face_names[best_match_index]).split('_')[0]
+                            tempconfidence = face_confidence(face_distances[best_match_index])
+                            # Compare numeric confidence (threshold 84.0)
+                            if tempname == Student_Name and float(tempconfidence) >= 84.0:
+                                name = tempname
+                                confidence = float(tempconfidence)
     
-                    self.face_names.append(f'{name} ({confidence})')
+                    self.face_names.append(f'{name} ({confidence}%)')
     
             self.process_current_frame = not self.process_current_frame
     
             # Display the results
+            verified_student_detected = False
             for (top, right, bottom, left), name in zip(self.face_locations, self.face_names):
                 # Scale back up face locations since the frame we detected in was scaled to 1/4 size
                 top *= 4
                 right *= 4
                 bottom *= 4
                 left *= 4
-                if "Unknown" not in name:
-                    # Create the frame with the name
+                if "Unknown" not in name and Student_Name in name:
+                    # Verified student is detected
                     text = "Verified Student appeared"
+                    verified_student_detected = True
+                    verified_student_absent_start = None  # Reset absence timer
                 cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
                 cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
                 cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
     
+            # Track verified student absence
+            if not verified_student_detected:
+                if verified_student_absent_start is None:
+                    verified_student_absent_start = time.time()
+                    print("⚠️  Verified Student DISAPPEARED - Absence timer started")
+                else:
+                    absence_duration = time.time() - verified_student_absent_start
+                    print(f"Verified Student absent for {absence_duration:.1f}s (threshold: {absence_threshold}s)")
+                    
+                    # Log absence periodically
+                    if int(absence_duration) % 5 == 0 and int(absence_duration) > 0:
+                        print(f"🚨 CHEAT ALERT: Verified Student absent for {absence_duration:.1f}s")
+                        faceDetectionRecording(frame, f"ABSENCE: {Student_Name} absent for {absence_duration:.1f}s")
+                    
+                    # Terminate exam after threshold exceeded
+                    if absence_duration >= absence_threshold:
+                        print(f"🚨 EXAM TERMINATED: Verified Student absent for {absence_duration:.1f}s (>{absence_threshold}s)")
+                        trigger_violation(
+                            v_type="Verified Student Disappeared",
+                            img=frame,
+                            details=f"Student {Student_Name} not visible for {absence_duration:.1f} seconds",
+                            risk_level="Critical"
+                        )
+                        terminate_exam("Verified Student Disappeared", frame)
+                        break
+            
             # Display the resulting image
            # cv2.imshow('Face Recognition', frame)
             print(text)
@@ -1276,8 +1429,9 @@ def electronicDevicesDetection(frame):
     textED = "No Electronic Device Detected"
     
     try:
-        # Predict on image with optimized confidence threshold
-        detect_params = model.predict(source=[frame], conf=0.25, save=False, verbose=False)  
+        # Predict on image with lower confidence threshold for better detection
+        # Lower threshold = more sensitive to phones
+        detect_params = model.predict(source=[frame], conf=0.20, save=False, verbose=False)  
         
         for result in detect_params:  # iterate results
             boxes = result.boxes.cpu().numpy()  # get boxes on cpu in numpy
@@ -1286,7 +1440,7 @@ def electronicDevicesDetection(frame):
                 confidence = float(box.conf[0])
                 
                 # Log all detections for debugging
-                # print(f"YOLO Detected: {detected_obj} (confidence: {confidence:.2f})")
+                print(f"🔍 YOLO Detected: {detected_obj} (confidence: {confidence:.2f})")
                 
                 # Check for electronic devices and BOOKS
                 if detected_obj in ['cell phone', 'remote', 'laptop', 'tv', 'keyboard', 'mouse', 'book']:
@@ -1301,14 +1455,24 @@ def electronicDevicesDetection(frame):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                     
                     # TERMINATE EXAM IMMEDIATELY IF MOBILE PHONE IS DETECTED
-                    if detected_obj == 'cell phone' and confidence > 0.30:
-                        print(f"📱 MOBILE PHONE DETECTED - TERMINATING EXAM IMMEDIATELY")
+                    # Lower confidence threshold for more reliable detection
+                    if detected_obj == 'cell phone' and confidence > 0.20:
+                        print(f"🚨 📱 MOBILE PHONE DETECTED WITH {confidence:.2f} CONFIDENCE - TERMINATING EXAM IMMEDIATELY")
+                        
                         # Save violation evidence image
                         img_filename = f"mobile_phone_violation_{int(time.time())}.jpg"
                         cv2.imwrite(img_filename, frame)
                         move_file_to_output_folder(img_filename, 'Violations')
                         
-                        # Create violation record
+                        # Log to trigger_violation for comprehensive logging
+                        trigger_violation(
+                            v_type="Mobile Phone Detected",
+                            img=frame,
+                            details=f"Mobile phone detected with {confidence:.2f} confidence",
+                            risk_level="Critical"
+                        )
+                        
+                        # Create violation record for compatibility
                         phone_violation = {
                             "Name": "Mobile Phone Detected",
                             "Time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1331,7 +1495,7 @@ def electronicDevicesDetection(frame):
     
     # Call recording function BEFORE resetting flag
     EDD_record_duration(textED, frame)
-    print(f"Device Detection Status: {textED}")
+    print(f"📊 Device Detection Status: {textED}")
     
     # Reset flag for next detection cycle
     EDFlag = False
@@ -1817,3 +1981,6 @@ master_reader_thread.start()
 
 a = Recorder()
 fr = FaceRecognition()
+
+# Register camera cleanup on exit
+atexit.register(close_camera)

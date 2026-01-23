@@ -21,6 +21,8 @@ try:
 except ImportError:
     keyboard = None
 from dotenv import load_dotenv
+import base64
+import io
 
 # Load environment variables
 load_dotenv()
@@ -66,6 +68,17 @@ client = WebApplicationClient(GOOGLE_CLIENT_ID)
 # Initialize extensions
 mail = Mail(app)
 mongo = PyMongo(app)
+
+# Pass mongo reference to utils for violation logging
+utils.mongo = mongo
+
+@app.teardown_appcontext
+def release_camera_on_teardown(exception=None):
+    """Ensure camera is released when Flask app context tears down."""
+    try:
+        utils.close_camera()
+    except Exception as e:
+        print(f"Error in teardown releasing camera: {e}")
 
 def get_google_provider_cfg():
     """Fetch Google's OpenID configuration."""
@@ -422,57 +435,46 @@ def video_capture():
     return Response(capture_by_frames(), 
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/saveFaceInput')
+@app.route('/saveFaceInput', methods=['POST'])
 def saveFaceInput():
-    """Save face input image."""
-    # Session-safe studentInfo retrieval
-    studentInfo = session.get('studentInfo')
-    if studentInfo is None:
-        user = mongo.db.students.find_one({"_id": ObjectId(session['user_id'])})
-        if user:
-            studentInfo = {
-                "Id": str(user['_id']),
-                "Name": user['Name'],
-                "Email": user['Email'],
-                "Password": user['Password']
-            }
-        else:
-            flash('Student information not found.', 'error')
-            return redirect(url_for('main'))
-
-    # Capture image from existing webcam if open, otherwise open new
-    frame = None
-    if hasattr(utils, 'cap') and utils.cap is not None and utils.cap.isOpened():
-        success, frame = utils.cap.read()
-    else:
-        cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        if cam.isOpened():
-            success, frame = cam.read()
-            cam.release()
-        else:
-            success = False
-
-    if not success or frame is None:
-        flash('Unable to access camera or capture image. Please try again.', 'error')
-        return redirect(url_for('faceInput'))
-    
-    # Generate profile name (using resultId from utils)
-    res_id = utils.get_resultId()
-    profileName = f"{studentInfo['Name']}_{res_id:03d}_Profile.jpg"
-    session['profileName'] = profileName
-    
-    # Save image locally first
-    cv2.imwrite(profileName, frame)
-    
-    # Move to profiles folder
+    """Save face input image uploaded from client (base64)."""
     try:
-        utils.move_file_to_output_folder(profileName, 'Profiles')
+        data = request.get_json()
+        img_b64 = data.get('image') if data else None
+        if not img_b64:
+            return jsonify({'success': False, 'error': 'No image provided'}), 400
+
+        # Session-safe studentInfo retrieval
+        studentInfo = session.get('studentInfo')
+        if studentInfo is None:
+            user = mongo.db.students.find_one({"_id": ObjectId(session['user_id'])})
+            if user:
+                studentInfo = {"Id": str(user['_id']), "Name": user['Name'], "Email": user['Email'], "Password": user['Password']}
+            else:
+                return jsonify({'success': False, 'error': 'Student information not found'}), 400
+
+        # Parse base64 image and save
+        header, encoded = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
+        image_bytes = base64.b64decode(encoded)
+
+        # Generate profile name and save
+        res_id = utils.get_resultId()
+        profileName = f"{studentInfo['Name']}_{res_id:03d}_Profile.jpg"
+        session['profileName'] = profileName
+
+        with open(profileName, 'wb') as f:
+            f.write(image_bytes)
+
+        # Move to profiles folder
+        try:
+            utils.move_file_to_output_folder(profileName, 'Profiles')
+        except Exception as e:
+            print(f"Error moving profile image: {e}")
+
+        return jsonify({'success': True})
     except Exception as e:
-        print(f"Error moving profile image: {e}")
-        # If move fails, try to just keep it or report error
-        flash('Verification image saved with warnings.', 'warning')
-    
-    return redirect(url_for('confirmFaceInput'))
+        print(f"Error in saveFaceInput: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/confirmFaceInput')
 def confirmFaceInput():
@@ -1168,7 +1170,55 @@ def exam_terminated():
 def check_exam_status():
     """Check exam status for AJAX polling."""
     status = 'terminated' if utils.exam_status.get('terminated', False) else 'running'
-    return jsonify({'status': status})
+    violation_type = utils.exam_status.get('violation_type', '')
+    return jsonify({
+        'status': status,
+        'violation_type': violation_type,
+        'terminated': utils.exam_status.get('terminated', False)
+    })
+
+@app.route('/api/check_violations', methods=['GET'])
+def check_violations():
+    """Check if any violations have been detected."""
+    if 'user_id' not in session or session.get('user_role') != 'STUDENT':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    violations = []
+    if utils.violation_counts:
+        for v_type, count in utils.violation_counts.items():
+            violations.append({
+                'type': v_type,
+                'count': count
+            })
+    
+    return jsonify({
+        'violations': violations,
+        'exam_terminated': utils.exam_status.get('terminated', False),
+        'termination_reason': utils.exam_status.get('violation_type', '')
+    })
+
+@app.route('/api/get_violations_log', methods=['GET'])
+def get_violations_log():
+    """Get violations log from MongoDB for admin review."""
+    if 'user_id' not in session or session.get('user_role') != 'ADMIN':
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        result_id = request.args.get('result_id', None)
+        query = {}
+        if result_id:
+            query['result_id'] = int(result_id)
+        
+        violations = list(mongo.db.violations.find(query).sort('timestamp', -1))
+        
+        # Convert ObjectId and datetime to strings for JSON serialization
+        for v in violations:
+            v['_id'] = str(v['_id'])
+            v['timestamp'] = v['timestamp'].isoformat() if v.get('timestamp') else ''
+        
+        return jsonify({'violations': violations})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/deleteStudent/<string:stdId>', methods=['GET'])
 def deleteStudent(stdId):
