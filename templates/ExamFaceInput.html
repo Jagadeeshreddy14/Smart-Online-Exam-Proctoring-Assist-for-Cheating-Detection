@@ -38,13 +38,32 @@
 
       <section class="table__body">
         <div id="cameraSection" style="display:block;">
-          <video id="localVideo" class="host-img" autoplay playsinline muted></video>
+          <video id="localVideo" class="host-img" autoplay playsinline muted style="filter: brightness(1) contrast(1);"></video>
           <canvas id="captureCanvas" style="display:none;"></canvas>
         </div>
-        <div id="cameraControls" style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+        
+        <div id="brightnessControls" style="margin-top:15px; padding:15px; background:#222; border-radius:8px; display:none;">
+          <div style="color:#fff; margin-bottom:12px;">
+            <label style="display:block; margin-bottom:8px;">
+              <i class='bx bx-sun'></i> Brightness: <span id="brightnessValue">100</span>%
+            </label>
+            <input type="range" id="brightness" min="50" max="150" value="100" style="width:100%; cursor:pointer;">
+          </div>
+          <div style="color:#fff;">
+            <label style="display:block; margin-bottom:8px;">
+              <i class='bx bx-adjust'></i> Contrast: <span id="contrastValue">100</span>%
+            </label>
+            <input type="range" id="contrast" min="50" max="150" value="100" style="width:100%; cursor:pointer;">
+          </div>
+        </div>
+        
+        <div id="cameraControls" style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <label for="deviceSelect" style="color:#fff;">Camera:</label>
           <select id="deviceSelect" style="min-width:220px; padding:6px; border-radius:6px;"></select>
           <button id="retryBtn" class="next" style="padding:6px 12px;">Retry</button>
+          <button id="brightnessToggle" class="next" style="padding:6px 12px; display:none;">
+            <i class='bx bx-sun'></i> Adjust Light
+          </button>
         </div>
 
         <div id="uploadSection" style="margin-top:20px; padding:20px; border:2px dashed #666; border-radius:8px; text-align:center; display:none;">
@@ -69,7 +88,31 @@
         const btn = document.getElementById('captureBtn');
         const uploadBtn = document.getElementById('uploadBtn');
         const photoUpload = document.getElementById('photoUpload');
+        const brightnessSlider = document.getElementById('brightness');
+        const contrastSlider = document.getElementById('contrast');
+        const brightnessValue = document.getElementById('brightnessValue');
+        const contrastValue = document.getElementById('contrastValue');
+        const brightnessToggle = document.getElementById('brightnessToggle');
+        const brightnessControls = document.getElementById('brightnessControls');
         let cameraAvailable = false;
+
+        // Brightness and Contrast Control
+        function updateFilter() {
+          const brightness = brightnessSlider.value / 100;
+          const contrast = contrastSlider.value / 100;
+          video.style.filter = `brightness(${brightness}) contrast(${contrast})`;
+          brightnessValue.textContent = brightnessSlider.value;
+          contrastValue.textContent = contrastSlider.value;
+        }
+
+        brightnessSlider.addEventListener('input', updateFilter);
+        contrastSlider.addEventListener('input', updateFilter);
+
+        brightnessToggle.addEventListener('click', function (e) {
+          e.preventDefault();
+          brightnessControls.style.display = brightnessControls.style.display === 'none' ? 'block' : 'none';
+          brightnessToggle.textContent = brightnessControls.style.display === 'none' ? '☀️ Adjust Light' : '✓ Light OK';
+        });
 
         async function tryGetUserMedia(constraints) {
           try {
@@ -110,12 +153,16 @@
             cameraAvailable = true;
             btn.disabled = false;
             btn.style.opacity = '1';
+            brightnessToggle.style.display = 'block';
+            brightnessControls.style.display = 'block';
             console.log('Camera initialized successfully');
           } catch (err) {
             console.error('initCamera error:', err.message || err);
             cameraAvailable = false;
             btn.disabled = true;
             btn.style.opacity = '0.6';
+            brightnessToggle.style.display = 'none';
+            brightnessControls.style.display = 'none';
             document.getElementById('uploadSection').style.display = 'block';
             const msg = `Camera unavailable: ${err && err.message ? err.message : err}.\n\nOptions:\n1. Select a different camera from the dropdown and click Retry\n2. Upload a photo instead\n3. Close Zoom, Teams, or other camera apps and refresh`;
             alert(msg);
@@ -199,12 +246,14 @@
             cameraAvailable = true;
             btn.disabled = false;
             btn.style.opacity = '1';
+            brightnessToggle.style.display = 'block';
             document.getElementById('uploadSection').style.display = 'none';
           } catch (e) {
             console.error('startStream failed:', e.message || e);
             cameraAvailable = false;
             btn.disabled = true;
             btn.style.opacity = '0.6';
+            brightnessToggle.style.display = 'none';
             document.getElementById('uploadSection').style.display = 'block';
             throw e;
           }
@@ -226,6 +275,12 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
+            
+            // Apply filter to canvas as well
+            const brightness = brightnessSlider.value / 100;
+            const contrast = contrastSlider.value / 100;
+            ctx.filter = `brightness(${brightness}) contrast(${contrast})`;
+            
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             const dataURL = canvas.toDataURL('image/jpeg', 0.85);
             

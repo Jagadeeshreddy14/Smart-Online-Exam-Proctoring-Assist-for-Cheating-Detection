@@ -76,6 +76,7 @@ utils.mongo = mongo
 def release_camera_on_teardown(exception=None):
     """Ensure camera is released when Flask app context tears down."""
     try:
+        utils.app_shutting_down = True
         utils.close_camera()
     except Exception as e:
         print(f"Error in teardown releasing camera: {e}")
@@ -500,20 +501,17 @@ def systemCheck():
         flash('Please login as a student first.', 'error')
         return redirect(url_for('main'))
     
-    # Ensure camera is released so browser can access it for system check
-    # Add more robust cleanup
-    try:
-        if hasattr(utils, 'cap') and utils.cap is not None:
-            if utils.cap.isOpened():
-                print("Releasing camera for system check...")
-                utils.cap.release()
-            utils.cap = None
-            # Give system time to fully release the camera
-            time.sleep(0.5)
-    except Exception as e:
-        print(f"Error releasing camera: {e}")
-        # Continue anyway, as the browser might still be able to access it
-        
+    # Pause master frame reader briefly by setting stop flag
+    # This allows browser to access camera without complete release
+    original_flag = utils.Globalflag
+    utils.Globalflag = False
+    utils.stop_proctoring_flag = True
+    
+    # Give system time to release camera resources
+    time.sleep(1)
+    
+    print("🔧 System check page loaded - camera paused for browser access")
+    
     return render_template('ExamSystemCheck.html')
 
 @app.route('/systemCheck', methods=["POST"])
@@ -543,83 +541,53 @@ def systemCheckError():
 @app.route('/exam')
 def exam():
     """Start exam page."""
-    if 'user_id' not in session or session.get('user_role') != 'STUDENT':
-        flash('Please login as a student first.', 'error')
-        return redirect(url_for('main'))
-    
-    # Reset flags
-    utils.stop_proctoring_flag = False
-    utils.Globalflag = True
-    
-    # Wait for master_frame_reader to handle camera initialization
-    # Give it more time and better feedback
-    max_wait_time = 45  # Increased from 30 to 45 seconds
-    counter = 0
-    
-    print("Waiting for camera initialization...")
-    while (not hasattr(utils, 'cap') or utils.cap is None or not utils.cap.isOpened()) and counter < max_wait_time:
-        time.sleep(0.2)  # Slightly increased sleep for stability
-        counter += 1
-        if counter % 10 == 0:  # Every 2 seconds
-            print(f"Still waiting for camera... ({counter}/{max_wait_time} seconds)")
-    
-    # Final check with more detailed error reporting
-    camera_ready = hasattr(utils, 'cap') and utils.cap is not None and utils.cap.isOpened()
-    
-    if not camera_ready:
-        error_msg = f"Camera failed to initialize after {max_wait_time} seconds. "
-        if hasattr(utils, 'cap'):
-            if utils.cap is None:
-                error_msg += "Camera object is None. "
-            elif not utils.cap.isOpened():
-                error_msg += "Camera is not opened. "
-                # Try to force reinitialization
-                try:
-                    if utils.cap is not None:
-                        utils.cap.release()
-                    utils.cap = None
-                    print("Attempting manual camera reinitialization...")
-                    utils.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-                    if not utils.cap.isOpened():
-                        utils.cap = cv2.VideoCapture(0)
-                    if utils.cap.isOpened():
-                        utils.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        utils.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                        utils.cap.set(cv2.CAP_PROP_FPS, 20)
-                        utils.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                        camera_ready = True
-                        print("Manual camera initialization successful!")
-                except Exception as init_error:
-                    error_msg += f"Manual init failed: {str(init_error)}. "
-        else:
-            error_msg += "Camera attribute not found. "
+    try:
+        if 'user_id' not in session or session.get('user_role') != 'STUDENT':
+            flash('Please login as a student first.', 'error')
+            return redirect(url_for('main'))
         
-        if not camera_ready:
-            print(f"Camera Error: {error_msg}")
-            flash(error_msg + 'Please check your camera connection and permissions.', 'error')
-            return redirect(url_for('systemCheck'))
-    
-    print("Camera is ready for exam proctoring")
-    
-    # Reset flags
-    utils.stop_proctoring_flag = False
-    utils.Globalflag = True
-    
-    # Reset exam status and violation history
-    utils.violation_counts = {}
-    utils.exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
-    
-    # Start proctoring logic threads
-    start_loop()
-    
-    # Setup keyboard hook safely
-    if keyboard:
+        print("📋 Exam route accessed - initializing proctoring...")
+        
+        # Give browser time to release camera (it was in use for system check)
+        print("⏳ Releasing browser camera resources...")
+        time.sleep(1)
+        
+        # Reset stop flag so master_frame_reader can work
+        utils.stop_proctoring_flag = False
+        utils.Globalflag = True
+        
+        # Short sleep for flag propagation
+        time.sleep(0.2)
+        
+        # Reset exam status and violation history
+        utils.violation_counts = {}
+        utils.exam_status = {'terminated': False, 'violation_type': '', 'evidence_image': ''}
+        utils.no_person_status = {'detected': True, 'start_time': None}
+        
+        # Start proctoring logic threads in background (doesn't block)
         try:
-            keyboard.hook(utils.shortcut_handler)
+            start_loop()
+            print("✅ Proctoring threads started")
         except Exception as e:
-            print(f"Error setting up keyboard hook: {e}")
+            print(f"⚠️ Warning - Error starting proctoring threads: {e}")
+            # Don't block page load - threads may start later
+        
+        # Setup keyboard hook safely
+        if keyboard:
+            try:
+                keyboard.hook(utils.shortcut_handler)
+            except Exception as e:
+                print(f"⚠️ Warning - Error setting up keyboard hook: {e}")
+        
+        print("🎓 Loading exam page...")
+        return render_template('Exam.html')
     
-    return render_template('Exam.html')
+    except Exception as e:
+        print(f"❌ ERROR in /exam route: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading exam page. Please try again.', 'error')
+        return redirect(url_for('systemCheck'))
 
 def save_exam_result(student_data, score, trust_score, status, location_data=None, session_id=None):
     """Centralized function to save exam results to JSON and MongoDB."""

@@ -65,6 +65,7 @@ violation_counts = {} # Tracks counts of specific violations per session
 no_person_status = {'detected': True, 'start_time': None}
 extension_heartbeat_time = 0
 mongo = None  # MongoDB reference - will be set from app.py
+app_shutting_down = False  # Flag to prevent cleanup while app is running
 
 
 # Result ID Initialization
@@ -85,30 +86,36 @@ resultId = fetch_last_id() + 1
 current_exam_result_id = None
 
 def close_camera():
-    """Release the global camera if it's open."""
-    global cap
+    """Release the global camera if it's open. Only called on app shutdown."""
+    global cap, app_shutting_down
+    # Only close if app is actually shutting down, not during normal operation
+    if not app_shutting_down:
+        return
+    
     try:
         if cap is not None:
             try:
                 if cap.isOpened():
                     cap.release()
-            except Exception:
-                # some backends raise on isOpened; attempt release anyway
+                    print("✅ Camera properly released on shutdown")
+            except Exception as e:
+                print(f"Warning: Error checking camera state: {e}")
+                # Try to release anyway
                 try:
                     cap.release()
                 except Exception:
                     pass
             cap = None
-            print("Camera released by close_camera()")
     except Exception as e:
-        print(f"Error releasing camera: {e}")
+        print(f"Error in close_camera: {e}")
 
 def stop_proctoring():
-    global stop_proctoring_flag, Globalflag, cap
-    print("Stopping proctoring...")
+    """Stop proctoring but keep camera available for next exam."""
+    global stop_proctoring_flag, Globalflag
+    print("🛑 Stopping proctoring...")
     stop_proctoring_flag = True
     Globalflag = False
-    close_camera()
+    # Don't close camera here - keep it available for reuse
 
 def terminate_exam(violation_type, frame=None):
     global stop_proctoring_flag, Globalflag, exam_status, cap
@@ -152,17 +159,43 @@ def trigger_violation(v_type, img, details="", risk_level="Low"):
     violation_counts[v_type] = violation_counts.get(v_type, 0) + 1
     count = violation_counts[v_type]
     
-    # Save violation evidence image for EVERY detection
+    # Save violation evidence image for EVERY detection (asynchronously to avoid blocking)
     img_filename = None
+    def _save_and_move_image(img_to_save, filename):
+        try:
+            # Encode as JPEG in memory for faster write
+            ret, buf = cv2.imencode('.jpg', img_to_save, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if not ret:
+                print("Error encoding image for evidence")
+                return
+            dest_path = os.path.join(os.getcwd(), filename)
+            with open(dest_path, 'wb') as f:
+                f.write(buf.tobytes())
+            try:
+                move_file_to_output_folder(filename, 'Violations')
+                exam_status['evidence_image'] = filename
+            except Exception as e:
+                print(f"Error moving evidence image: {e}")
+        except Exception as e:
+            print(f"Exception saving evidence image: {e}")
+
     if img is not None:
         timestamp = int(time.time())
         img_filename = f"{v_type.lower().replace(' ', '_')}_{timestamp}.jpg"
-        # Save in current working directory before moving to static/Violations
-        cv2.imwrite(os.path.join(os.getcwd(), img_filename), img)
+        threading.Thread(target=_save_and_move_image, args=(img.copy(), img_filename), daemon=True).start()
+    else:
+        # If no image provided, capture current frame from camera
         try:
-            move_file_to_output_folder(img_filename, 'Violations')
+            current_frame = get_frame()
+            if current_frame is not None:
+                timestamp = int(time.time())
+                img_filename = f"{v_type.lower().replace(' ', '_')}_{timestamp}.jpg"
+                threading.Thread(target=_save_and_move_image, args=(current_frame.copy(), img_filename), daemon=True).start()
+                print(f"✅ Evidence image scheduled for saving: {img_filename}")
+            else:
+                print(f"⚠️ WARNING: No frame available to capture evidence for {v_type}")
         except Exception as e:
-            print(f"Error moving evidence image: {e}")
+            print(f"⚠️ ERROR: Could not capture evidence image: {e}")
 
     # Log to violation.json with Risk Level
     violation_entry = {
@@ -343,23 +376,28 @@ face_cascade = cv2.CascadeClassifier(get_cascade_path())
 
 def master_frame_reader():
     """Centralized perpetual thread to read frames from camera when needed."""
-    global global_frame, cap, Globalflag, stop_proctoring_flag
-    print("Master Frame Reader thread started (Persistent)")
+    global global_frame, cap, Globalflag, stop_proctoring_flag, app_shutting_down
+    print("🎥 Master Frame Reader thread started (Persistent)")
     
-    while True:
+    while not app_shutting_down:
         # If proctoring is stopped, release camera and wait
         if stop_proctoring_flag:
-            if cap is not None and cap.isOpened():
-                print("Master Reader: Proctoring stopped, releasing camera...")
-                cap.release()
-                cap = None
+            if cap is not None:
+                try:
+                    if cap.isOpened():
+                        print("🛑 Master Reader: Proctoring stopped, releasing camera...")
+                        cap.release()
+                except Exception as e:
+                    print(f"⚠️ Error releasing camera: {e}")
+                finally:
+                    cap = None
             time.sleep(0.5)
             continue
 
         # Auto-initialize camera if proctoring is active but camera is closed
-        if cap is None or not cap.isOpened():
+        if cap is None or (cap is not None and not cap.isOpened()):
             try:
-                print("Master Reader: Opening Camera...")
+                print("📷 Master Reader: Opening Camera...")
                 # Try multiple backends for better compatibility
                 backends = [
                     cv2.CAP_DSHOW,      # DirectShow (Windows)
@@ -370,12 +408,15 @@ def master_frame_reader():
                 
                 cap_opened = False
                 for backend in backends:
-                    if backend == -1:
-                        cap = cv2.VideoCapture(0)  # Default backend
-                    else:
-                        cap = cv2.VideoCapture(0, backend)
-                    
-                    if cap.isOpened():
+                    try:
+                        if backend == -1:
+                            cap = cv2.VideoCapture(0)  # Default backend
+                        else:
+                            cap = cv2.VideoCapture(0, backend)
+                        
+                        if cap is None or not cap.isOpened():
+                            continue
+                        
                         # Test if we can actually read a frame
                         for _ in range(5):  # Try reading 5 frames
                             success, _ = cap.read()
@@ -387,54 +428,47 @@ def master_frame_reader():
                         if cap_opened:
                             break
                         else:
-                            cap.release()
+                            try:
+                                cap.release()
+                            except Exception:
+                                pass
                             cap = None
-                    else:
+                    except Exception as backend_error:
+                        print(f"⚠️ Backend error: {backend_error}")
                         cap = None
+                        continue
                 
                 if not cap_opened:
-                    print("Master Reader: Failed to open camera with any backend, retrying in 2s...")
-                    # List available backends for debugging
-                    try:
-                        backends_list = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
-                        print("Available OpenCV backends:")
-                        for backend in backends_list:
-                            try:
-                                test_cap = cv2.VideoCapture(0, backend)
-                                if test_cap.isOpened():
-                                    print(f"  ✓ Backend {backend} works")
-                                    test_cap.release()
-                                else:
-                                    print(f"  ✗ Backend {backend} failed")
-                            except Exception as be:
-                                print(f"  ✗ Backend {backend} error: {be}")
-                    except Exception as debug_error:
-                        print(f"Debug error: {debug_error}")
+                    print("⚠️ Master Reader: Failed to open camera, retrying in 2s...")
+                    cap = None
                     time.sleep(2)
                     continue
                 else:
                     # Optimize camera settings
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    cap.set(cv2.CAP_PROP_FPS, 20)
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    # Additional optimizations
-                    cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # Disable autofocus if supported
-                    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual exposure
-                    print(f"Master Reader: Camera opened successfully with backend {cap.getBackendName()}")
+                    try:
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        cap.set(cv2.CAP_PROP_FPS, 20)
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception as setting_error:
+                        print(f"⚠️ Camera setting error (non-critical): {setting_error}")
+                    print(f"✅ Master Reader: Camera opened successfully")
             except Exception as e:
-                print(f"Master Reader: Error opening camera: {e}")
+                print(f"⚠️ Master Reader: Error opening camera: {e}")
+                cap = None
                 time.sleep(2)
                 continue
 
         # Read frames while camera is open and proctoring is NOT stopped
         try:
-            success, frame = cap.read()
-            if success:
-                with frame_lock:
-                    global_frame = frame
+            if cap is not None and cap.isOpened():
+                success, frame = cap.read()
+                if success:
+                    with frame_lock:
+                        global_frame = frame
+                else:
+                    time.sleep(0.01)
             else:
-                print("Master Frame Reader: Failed to read frame")
                 time.sleep(0.01)
         except Exception as e:
             print(f"Error in master_frame_reader loop: {e}")
@@ -1055,7 +1089,21 @@ class FaceRecognition:
         
         if not cap.isOpened():
             sys.exit('Video source not found...')
-    
+        # Wait for camera to be initialized by master_frame_reader (max 10 seconds)
+        try:
+            print("⏳ Waiting for camera initialization in run_recognition...")
+            wait_count = 0
+            while get_frame() is None and wait_count < 100:  # 100 * 0.1s = 10 seconds max
+                time.sleep(0.1)
+                wait_count += 1
+
+            if wait_count >= 100:
+                print("⚠️ WARNING: Camera initialization timeout in run_recognition. Proceeding anyway...")
+            else:
+                print("✅ Camera ready for run_recognition")
+        except Exception as e:
+            print(f"Error during camera wait in run_recognition: {e}")
+
         while Globalflag and not stop_proctoring_flag:
             frame = get_optimized_frame()  # Use optimized frame function
             if frame is None:
@@ -1787,6 +1835,18 @@ def cheat_Detection1():
         if hasattr(mp, 'solutions'):
             mp_face_mesh = mp.solutions.face_mesh
             face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    
+        # Wait for camera to be initialized by master_frame_reader (max 10 seconds)
+        print("⏳ Waiting for camera initialization in cheat_Detection1...")
+        wait_count = 0
+        while get_frame() is None and wait_count < 100:  # 100 * 0.1s = 10 seconds max
+            time.sleep(0.1)
+            wait_count += 1
+    
+        if wait_count >= 100:
+            print("⚠️ WARNING: Camera initialization timeout in cheat_Detection1. Proceeding anyway...")
+        else:
+            print("✅ Camera ready for cheat_Detection1")
     except: pass
 
     while Globalflag:
@@ -1818,6 +1878,20 @@ def cheat_Detection2():
     # Initialize status
     no_person_status['detected'] = True
     no_person_status['start_time'] = None
+    # Wait for camera to be initialized by master_frame_reader (max 10 seconds)
+    try:
+        print("⏳ Waiting for camera initialization in cheat_Detection2...")
+        wait_count = 0
+        while get_frame() is None and wait_count < 100:  # 100 * 0.1s = 10 seconds max
+            time.sleep(0.1)
+            wait_count += 1
+
+        if wait_count >= 100:
+            print("⚠️ WARNING: Camera initialization timeout in cheat_Detection2. Proceeding anyway...")
+        else:
+            print("✅ Camera ready for cheat_Detection2")
+    except Exception as e:
+        print(f"Error during camera wait in cheat_Detection2: {e}")
     
     # Timing Constants for Face Presence (Synced with app.py)
     ALERT_THRESHOLD = 0
